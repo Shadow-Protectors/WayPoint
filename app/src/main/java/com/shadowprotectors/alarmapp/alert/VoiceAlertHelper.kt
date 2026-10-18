@@ -24,7 +24,9 @@ class VoiceAlertHelper(private val context: Context) : TextToSpeech.OnInitListen
 
     private var tts: TextToSpeech? = null
     private var isInitialized = false
-    private var pendingSpeechText: String? = null
+    private var speechGeneration = 0
+    private var effectiveLanguage = SupportedLanguage.ENGLISH
+    private var pendingSpeech: (() -> Unit)? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private var repeatSpeechRunnable: Runnable? = null
 
@@ -66,10 +68,9 @@ class VoiceAlertHelper(private val context: Context) : TextToSpeech.OnInitListen
             applyLanguage(currentLanguage)
 
             // Play any pending speech that was requested during initialization
-            pendingSpeechText?.let {
-                speakInternal(it, TextToSpeech.QUEUE_FLUSH, "InitPending")
-                pendingSpeechText = null
-            }
+            val pending = pendingSpeech
+            pendingSpeech = null
+            pending?.invoke()
         } else {
             Log.e("VoiceAlertHelper", "TTS Initialization failed with status: $status")
         }
@@ -131,6 +132,7 @@ class VoiceAlertHelper(private val context: Context) : TextToSpeech.OnInitListen
     }
 
     private fun speakInternal(text: String, queueMode: Int, utteranceTag: String) {
+        val generation = speechGeneration
         requestAudioFocus()
         playPreSpeechChime()
 
@@ -141,7 +143,7 @@ class VoiceAlertHelper(private val context: Context) : TextToSpeech.OnInitListen
 
         // 220ms delay to allow pre-chime to complete and audio focus to duck background music
         mainHandler.postDelayed({
-            if (tts != null && isInitialized) {
+            if (generation == speechGeneration && tts != null && isInitialized) {
                 tts?.speak(text, queueMode, params, "TravelAlarm_${utteranceTag}_${System.currentTimeMillis()}")
             }
         }, 220)
@@ -149,9 +151,11 @@ class VoiceAlertHelper(private val context: Context) : TextToSpeech.OnInitListen
 
     private fun applyLanguage(language: SupportedLanguage) {
         if (!isInitialized || tts == null) return
+        effectiveLanguage = language
         val result = tts?.setLanguage(language.locale)
         if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
             Log.w("VoiceAlertHelper", "Language ${language.code} not supported on device, falling back to English")
+            effectiveLanguage = SupportedLanguage.ENGLISH
             tts?.setLanguage(Locale.ENGLISH)
         }
     }
@@ -159,7 +163,7 @@ class VoiceAlertHelper(private val context: Context) : TextToSpeech.OnInitListen
     fun speakApproachAlert(destinationName: String, distanceKm: Double) {
         cancelPendingRepeat()
         val formattedDistance = String.format(Locale.US, "%.1f", distanceKm)
-        val text = when (currentLanguage) {
+        val text = when (effectiveLanguage) {
             SupportedLanguage.TAMIL -> {
                 "கவனம்! $destinationName இன்னும் $formattedDistance கிலோமீட்டரில் வரவுள்ளது. இறங்குவதற்கு தயாராகுங்கள்."
             }
@@ -175,7 +179,7 @@ class VoiceAlertHelper(private val context: Context) : TextToSpeech.OnInitListen
             speakInternal(text, TextToSpeech.QUEUE_FLUSH, "Approach")
 
             // Schedule a reinforcement repeat after 4.5 seconds
-            val repeatText = when (currentLanguage) {
+            val repeatText = when (effectiveLanguage) {
                 SupportedLanguage.TAMIL -> "நினைவூட்டல்! $destinationName இலக்கை நெருங்குகிறீர்கள்."
                 SupportedLanguage.HINDI -> "याद दिलाना! आप $destinationName के पास पहुंच रहे हैं।"
                 SupportedLanguage.ENGLISH -> "Reminder: Approaching $destinationName. Prepare to alight."
@@ -185,13 +189,13 @@ class VoiceAlertHelper(private val context: Context) : TextToSpeech.OnInitListen
             }
             mainHandler.postDelayed(repeatSpeechRunnable!!, 4500)
         } else {
-            pendingSpeechText = text
+            pendingSpeech = { speakApproachAlert(destinationName, distanceKm) }
         }
     }
 
     fun speakRecedingAlert(destinationName: String) {
         cancelPendingRepeat()
-        val text = when (currentLanguage) {
+        val text = when (effectiveLanguage) {
             SupportedLanguage.TAMIL -> {
                 "எச்சரிக்கை! $destinationName இலக்கிலிருந்து நீங்கள் விலகிச் செல்கிறீர்கள்."
             }
@@ -206,13 +210,13 @@ class VoiceAlertHelper(private val context: Context) : TextToSpeech.OnInitListen
         if (isInitialized && tts != null) {
             speakInternal(text, TextToSpeech.QUEUE_FLUSH, "Receding")
         } else {
-            pendingSpeechText = text
+            pendingSpeech = { speakRecedingAlert(destinationName) }
         }
     }
 
     fun speakArrivalAlert(destinationName: String) {
         cancelPendingRepeat()
-        val text = when (currentLanguage) {
+        val text = when (effectiveLanguage) {
             SupportedLanguage.TAMIL -> {
                 "கவனம்! நீங்கள் $destinationName இலக்கை நெருங்கிவிட்டீர்கள். உடனே எழுந்திருக்கவும்!"
             }
@@ -220,39 +224,26 @@ class VoiceAlertHelper(private val context: Context) : TextToSpeech.OnInitListen
                 "ध्यान दें! आप $destinationName के बहुत करीब हैं। कृपया उठें!"
             }
             SupportedLanguage.ENGLISH -> {
-                "Wake up! You have arrived at $destinationName."
+                "Wake up! You are near $destinationName. Please check your stop."
             }
         }
 
         if (isInitialized && tts != null) {
             speakInternal(text, TextToSpeech.QUEUE_ADD, "Arrival")
         } else {
-            pendingSpeechText = text
-        }
-    }
-
-    fun speakTestAlert() {
-        cancelPendingRepeat()
-        val text = when (currentLanguage) {
-            SupportedLanguage.TAMIL -> "வேபாயிண்ட் சோதனை எச்சரிக்கை. ஒலி மற்றும் அதிர்வு சரியாக வேலை செய்கிறது."
-            SupportedLanguage.HINDI -> "वेपॉइंट टेस्ट अलार्म। ध्वनि और कंपन सत्यापित हैं।"
-            SupportedLanguage.ENGLISH -> "WayPoint test alert. Audio focus and speech volume verified."
-        }
-        if (isInitialized && tts != null) {
-            speakInternal(text, TextToSpeech.QUEUE_FLUSH, "Test")
-        } else {
-            pendingSpeechText = text
+            pendingSpeech = { speakArrivalAlert(destinationName) }
         }
     }
 
     private fun cancelPendingRepeat() {
+        speechGeneration++
         repeatSpeechRunnable?.let { mainHandler.removeCallbacks(it) }
         repeatSpeechRunnable = null
     }
 
     fun stop() {
         cancelPendingRepeat()
-        pendingSpeechText = null
+        pendingSpeech = null
         try {
             tts?.stop()
         } catch (e: Exception) {
@@ -264,7 +255,7 @@ class VoiceAlertHelper(private val context: Context) : TextToSpeech.OnInitListen
 
     fun shutdown() {
         cancelPendingRepeat()
-        pendingSpeechText = null
+        pendingSpeech = null
         try {
             tts?.stop()
             tts?.shutdown()

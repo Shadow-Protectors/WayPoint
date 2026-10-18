@@ -31,14 +31,10 @@ import java.util.Locale
 
 class MapPickerBottomSheet : BottomSheetDialogFragment() {
 
-    interface OnDestinationSelectedListener {
-        fun onDestinationSelected(name: String, latitude: Double, longitude: Double)
-    }
 
     private var _binding: LayoutMapPickerBinding? = null
     private val binding get() = _binding!!
 
-    private var listener: OnDestinationSelectedListener? = null
     private lateinit var geocodingHelper: GeocodingHelper
     private lateinit var searchAdapter: SearchResultAdapter
 
@@ -46,13 +42,17 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
     private var currentCenterLng = 78.1100
     private var currentPlaceName = "Madurai Junction"
 
+    private val locationPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        if (grants.values.any { it }) fetchInitialLocation()
+        else context?.let { android.widget.Toast.makeText(it, "Location permission denied. Search or move the map to choose your stop.", android.widget.Toast.LENGTH_LONG).show() }
+    }
+
+    private var activeDialog: androidx.appcompat.app.AlertDialog? = null
     private var searchJob: Job? = null
     private var reverseGeocodeJob: Job? = null
     private lateinit var repository: com.shadowprotectors.alarmapp.data.SavedLocationRepository
-
-    fun setOnDestinationSelectedListener(listener: OnDestinationSelectedListener) {
-        this.listener = listener
-    }
 
     override fun onAttach(context: Context) {
         super.onAttach(context)
@@ -87,10 +87,10 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        val initLat = arguments?.getDouble(ARG_INIT_LAT, Double.NaN) ?: Double.NaN
-        val initLng = arguments?.getDouble(ARG_INIT_LNG, Double.NaN) ?: Double.NaN
+        val initLat = (savedInstanceState ?: arguments)?.getDouble(ARG_INIT_LAT, Double.NaN) ?: Double.NaN
+        val initLng = (savedInstanceState ?: arguments)?.getDouble(ARG_INIT_LNG, Double.NaN) ?: Double.NaN
 
-        val hasCustomInit = !initLat.isNaN() && !initLng.isNaN()
+        val hasCustomInit = initLat.isFinite() && initLng.isFinite() && initLat in -90.0..90.0 && initLng in -180.0..180.0
         if (hasCustomInit) {
             currentCenterLat = initLat
             currentCenterLng = initLng
@@ -104,14 +104,9 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
             binding.mapView.controller.setCenter(GeoPoint(initLat, initLng))
             binding.mapView.controller.setZoom(16.0)
             binding.tvSelectedCoords.text = String.format(Locale.US, "Lat: %.5f, Lng: %.5f", initLat, initLng)
-            lifecycleScope.launch {
-                binding.pbGeocoding.isVisible = true
-                val resolvedName = geocodingHelper.reverseGeocode(initLat, initLng)
-                currentPlaceName = resolvedName
-                binding.tvSelectedPlaceName.text = resolvedName
-                binding.pbGeocoding.isVisible = false
-            }
+            onMapMoved()
         } else {
+            onMapMoved()
             fetchInitialLocation()
         }
     }
@@ -138,15 +133,18 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun onMapMoved() {
-        val center = binding.mapView.mapCenter
+        val viewBinding = _binding ?: return
+        val center = viewBinding.mapView.mapCenter
         currentCenterLat = center.latitude
         currentCenterLng = center.longitude
 
+        currentPlaceName = String.format(Locale.US, "Location %.5f, %.5f", currentCenterLat, currentCenterLng)
+        binding.tvSelectedPlaceName.text = currentPlaceName
         binding.tvSelectedCoords.text = String.format(Locale.US, "Lat: %.5f, Lng: %.5f", currentCenterLat, currentCenterLng)
 
         // Debounce reverse geocoding
         reverseGeocodeJob?.cancel()
-        reverseGeocodeJob = lifecycleScope.launch {
+        reverseGeocodeJob = viewLifecycleOwner.lifecycleScope.launch {
             delay(500)
             binding.pbGeocoding.isVisible = true
             val resolvedName = geocodingHelper.reverseGeocode(currentCenterLat, currentCenterLng)
@@ -186,7 +184,7 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
 
                 searchJob?.cancel()
                 if (query.length >= 2) {
-                    searchJob = lifecycleScope.launch {
+                    searchJob = viewLifecycleOwner.lifecycleScope.launch {
                         delay(350)
                         val results = geocodingHelper.searchPlaces(query, currentCenterLat, currentCenterLng)
                         if (results.isNotEmpty()) {
@@ -210,8 +208,15 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun setupListeners() {
+        binding.btnBackMap.setOnClickListener { dismiss() }
         binding.fabMyLocation.setOnClickListener {
-            fetchInitialLocation()
+            val fine = androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), android.Manifest.permission.ACCESS_FINE_LOCATION)
+            val coarse = androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), android.Manifest.permission.ACCESS_COARSE_LOCATION)
+            if (fine == android.content.pm.PackageManager.PERMISSION_GRANTED || coarse == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                fetchInitialLocation()
+            } else {
+                locationPermissionLauncher.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
+            }
         }
 
         binding.btnConfirmDestination.setOnClickListener {
@@ -220,6 +225,10 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun showNameInputDialog() {
+        if (activeDialog?.isShowing == true) return
+        val selectedLat = currentCenterLat
+        val selectedLng = currentCenterLng
+        val selectedName = currentPlaceName
         val context = requireContext()
         val textInputLayout = com.google.android.material.textfield.TextInputLayout(context).apply {
             hint = "e.g. Home, Office"
@@ -228,7 +237,7 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
             boxBackgroundColor = android.graphics.Color.parseColor("#F8FAFC")
         }
         val input = com.google.android.material.textfield.TextInputEditText(textInputLayout.context).apply {
-            setText(currentPlaceName)
+            setText(selectedName)
             setTextColor(android.graphics.Color.parseColor("#0F172A"))
             setHintTextColor(android.graphics.Color.parseColor("#94A3B8"))
             setSelection(text?.length ?: 0)
@@ -253,18 +262,18 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
             addView(cbSave)
         }
 
-        com.google.android.material.dialog.MaterialAlertDialogBuilder(context)
+        activeDialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(context)
             .setTitle("Name this location")
             .setView(container)
             .setPositiveButton("Confirm") { _, _ ->
                 val customName = input.text.toString().trim()
-                val finalName = customName.ifEmpty { currentPlaceName }
+                val finalName = customName.ifEmpty { selectedName }
                 val shouldSave = cbSave.isChecked
 
                 if (shouldSave) {
-                    processSaveLocationAndConfirm(finalName, currentCenterLat, currentCenterLng)
+                    processSaveLocationAndConfirm(finalName, selectedLat, selectedLng)
                 } else {
-                    listener?.onDestinationSelected(finalName, currentCenterLat, currentCenterLng)
+                    deliverDestination(finalName, selectedLat, selectedLng)
                     dismiss()
                 }
             }
@@ -273,28 +282,28 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun processSaveLocationAndConfirm(name: String, lat: Double, lng: Double) {
-        lifecycleScope.launch {
+        launchSave {
             val existingNear = repository.findNear(lat, lng, 50.0)
             if (existingNear != null) {
-                com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                activeDialog = com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
                     .setTitle("Nearby Saved Location Found")
                     .setMessage("A location near this point already exists:\n'${existingNear.customName}'\n\nWould you like to use the existing saved location or save as a new location?")
                     .setPositiveButton("Use Existing") { _, _ ->
-                        lifecycleScope.launch {
+                        launchSave {
                             repository.recordUsage(existingNear.id)
-                            listener?.onDestinationSelected(existingNear.customName, existingNear.latitude, existingNear.longitude)
+                            deliverDestination(existingNear.customName, existingNear.latitude, existingNear.longitude)
                             dismiss()
                         }
                     }
                     .setNegativeButton("Save as New") { _, _ ->
-                        lifecycleScope.launch {
+                        launchSave {
                             val newLoc = com.shadowprotectors.alarmapp.data.SavedLocation(
                                 customName = name,
                                 latitude = lat,
                                 longitude = lng
                             )
                             repository.insert(newLoc)
-                            listener?.onDestinationSelected(name, lat, lng)
+                            deliverDestination(name, lat, lng)
                             dismiss()
                         }
                     }
@@ -307,20 +316,45 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
                     longitude = lng
                 )
                 repository.insert(newLoc)
-                listener?.onDestinationSelected(name, lat, lng)
+                deliverDestination(name, lat, lng)
                 dismiss()
             }
         }
+    }
+
+    private fun launchSave(block: suspend () -> Unit) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            binding.btnConfirmDestination.isEnabled = false
+            try {
+                block()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                android.util.Log.e(TAG, "Could not save destination", error)
+                context?.let { android.widget.Toast.makeText(it, "Could not save location. Try again or uncheck Save to My Locations.", android.widget.Toast.LENGTH_LONG).show() }
+            } finally {
+                _binding?.btnConfirmDestination?.isEnabled = true
+            }
+        }
+    }
+
+    private fun deliverDestination(name: String, lat: Double, lng: Double) {
+        parentFragmentManager.setFragmentResult(RESULT_KEY, Bundle().apply {
+            putString("name", name)
+            putDouble("latitude", lat)
+            putDouble("longitude", lng)
+        })
     }
 
     private fun fetchInitialLocation() {
         try {
             val fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
             fusedLocationClient.lastLocation.addOnSuccessListener { location ->
+                val viewBinding = _binding ?: return@addOnSuccessListener
                 if (location != null) {
                     currentCenterLat = location.latitude
                     currentCenterLng = location.longitude
-                    binding.mapView.controller.animateTo(GeoPoint(location.latitude, location.longitude))
+                    viewBinding.mapView.controller.setCenter(GeoPoint(location.latitude, location.longitude))
                     binding.mapView.controller.setZoom(16.0)
                 }
             }
@@ -339,12 +373,24 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
         binding.mapView.onPause()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putDouble(ARG_INIT_LAT, currentCenterLat)
+        outState.putDouble(ARG_INIT_LNG, currentCenterLng)
+    }
+
     override fun onDestroyView() {
-        super.onDestroyView()
+        activeDialog?.dismiss()
+        activeDialog = null
+        searchJob?.cancel()
+        reverseGeocodeJob?.cancel()
+        _binding?.mapView?.onDetach()
         _binding = null
+        super.onDestroyView()
     }
 
     companion object {
+        const val RESULT_KEY = "destination_selection"
         const val TAG = "MapPickerBottomSheet"
         private const val ARG_INIT_LAT = "ARG_INIT_LAT"
         private const val ARG_INIT_LNG = "ARG_INIT_LNG"

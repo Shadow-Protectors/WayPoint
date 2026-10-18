@@ -60,13 +60,15 @@
                 android:gravity="center_vertical"
                 android:paddingHorizontal="14dp">
 
-                <ImageView
+                <androidx.appcompat.widget.AppCompatImageButton
                     android:id="@+id/btnBackMap"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:src="@drawable/ic_search"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:src="@drawable/ic_arrow_back"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:padding="12dp"
                     app:tint="@color/primary"
-                    android:contentDescription="Search Icon" />
+                    android:contentDescription="@string/map_back" />
 
                 <EditText
                     android:id="@+id/etSearchQuery"
@@ -83,8 +85,8 @@
 
                 <ImageView
                     android:id="@+id/btnClearSearch"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
                     android:src="@drawable/ic_clear"
                     app:tint="@color/text_muted"
                     android:visibility="gone"

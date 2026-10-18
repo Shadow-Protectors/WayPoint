@@ -58,6 +58,8 @@ class AlertManager(
         destinationName: String,
         profile: AlertProfile
     ): AlertLevel {
+        if (isAlarmDismissedByUser) return highestTriggeredLevel
+        if (!distanceKm.isFinite() || distanceKm < 0) return highestTriggeredLevel
         val now = System.currentTimeMillis()
 
         // 1. Handle moving away (RECEDING) warning
@@ -166,16 +168,6 @@ class AlertManager(
             AlertLevel.NONE -> {}
         }
         callback?.onAlertTriggered(level, distanceKm, destinationName)
-    }
-
-    /**
-     * Triggers a comprehensive test of all sensory channels (haptics, audio focus, chime, and TTS).
-     */
-    fun triggerTestAlert() {
-        val deviceState = DeviceStateHelper.getDeviceAudioState(context)
-        Log.i("AlertManager", "Running Alert System Test | ${deviceState.summary()}")
-        AudioAlarmHelper.playLevel2Alert(context)
-        voiceAlertHelper.speakTestAlert()
     }
 
     fun stopAlarm() {

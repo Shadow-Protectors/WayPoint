@@ -6,4 +6,9 @@
     <string name="status_idle">GPS Idle: Ready to set destination</string>
     <string name="status_tracking">Tracking active: Monitoring distance</string>
     <string name="cd_app_logo">Waypoint Logo</string>
+    <string name="help_button">Help</string>
+    <string name="help_title">Travel alarms &amp; progressive alerts</string>
+    <string name="help_close">Got it</string>
+    <string name="map_back">Back to destination setup</string>
+    <string name="help_content">Choose your destination\nSearch or move the map until the pin marks your stop. Confirm the location, give it a name and optionally save it. Back returns without changing your destination.\n\nBefore you travel\nChoose English, Tamil or Hindi, then tap Start Destination Alarm. Keep location enabled and allow notifications. Saved locations start an alarm when tapped. Stop the current trip before choosing another destination.\n\nProgressive alerts (Bus / Car)\n5 km: gentle chime and vibration.\n2 km: stronger vibration and attention pings.\n1 km: spoken destination reminder.\n0.5 km: continuous wake-up alarm and vibration. You are nearby, not necessarily at your stop.\n\nAlerts can skip stages when you start close to your destination. Distances are straight-line GPS estimates. Tap Stop or dismiss the alarm to silence it.\n\nVoice &amp; sound\nSpeech uses voice data installed on your phone, with English as a fallback. Check alarm volume and Do Not Disturb settings before travel. Map search needs internet; tracking uses GPS.</string>
 </resources>

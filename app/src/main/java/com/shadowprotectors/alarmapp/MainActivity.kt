@@ -25,8 +25,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.shadowprotectors.alarmapp.alert.AlertLevel
-import com.shadowprotectors.alarmapp.data.DatabaseHelper
-import com.shadowprotectors.alarmapp.data.Destination
 import com.shadowprotectors.alarmapp.databinding.ActivityMainBinding
 import com.shadowprotectors.alarmapp.databinding.DialogImportLinkBinding
 import com.shadowprotectors.alarmapp.engine.ApproachState
@@ -45,19 +43,16 @@ import java.util.Locale
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private lateinit var databaseHelper: DatabaseHelper
     private lateinit var geocodingHelper: GeocodingHelper
     private var selectedLanguageCode = "en"
     private var selectedTripMode: com.shadowprotectors.alarmapp.engine.TripMode = com.shadowprotectors.alarmapp.engine.TripMode.BUS_CAR
     private var isCurrentlyTracking = false
-    private var voiceAlertHelper: com.shadowprotectors.alarmapp.alert.VoiceAlertHelper? = null
-    private var testAlertManager: com.shadowprotectors.alarmapp.alert.AlertManager? = null
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
-        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+    ) { _ ->
+        val fineGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val coarseGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
         if (fineGranted || coarseGranted) {
             startTrackingService()
@@ -74,10 +69,7 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        databaseHelper = DatabaseHelper(this)
         geocodingHelper = GeocodingHelper(this)
-        voiceAlertHelper = com.shadowprotectors.alarmapp.alert.VoiceAlertHelper(this)
-        testAlertManager = com.shadowprotectors.alarmapp.alert.AlertManager(this, voiceAlertHelper!!)
 
         val db = com.shadowprotectors.alarmapp.data.AppDatabase.getInstance(this)
         savedLocationRepository = com.shadowprotectors.alarmapp.data.SavedLocationRepository(db.savedLocationDao())
@@ -92,6 +84,9 @@ class MainActivity : AppCompatActivity() {
         setupSavedLocationsRecyclerView()
         observeSavedLocations()
         setupLanguageButtons()
+        supportFragmentManager.setFragmentResultListener(MapPickerBottomSheet.RESULT_KEY, this) { _, result ->
+            setDestination(result.getString("name").orEmpty(), result.getDouble("latitude"), result.getDouble("longitude"))
+        }
         setupListeners()
         observeTrackingState()
 
@@ -142,6 +137,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setDestination(name: String, lat: Double, lng: Double) {
+        if (isCurrentlyTracking) return
         binding.etDestName.setText(name)
         binding.etLatitude.setText(String.format(Locale.US, "%.5f", lat))
         binding.etLongitude.setText(String.format(Locale.US, "%.5f", lng))
@@ -154,13 +150,9 @@ class MainActivity : AppCompatActivity() {
             .putFloat("PREF_DEST_LNG", lng.toFloat())
             .apply()
 
-        // Save to SQLite database
-        databaseHelper.insertDestination(
-            Destination(name = name, latitude = lat, longitude = lng, isPreset = false)
-        )
-
         // Update landmark confirmation
         updateLandmarkConfirmation(lat, lng)
+        updateUiFromTrackingState(ServiceEventBus.trackingState.value)
 
         // Calculate and show distance from current GPS if available
         try {
@@ -196,8 +188,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var landmarkJob: Job? = null
+
     private fun updateLandmarkConfirmation(lat: Double, lng: Double) {
-        lifecycleScope.launch {
+        landmarkJob?.cancel()
+        landmarkJob = lifecycleScope.launch {
             val landmarkText = geocodingHelper.getLandmarkConfirmation(lat, lng)
             binding.tvLandmarkConfirmation.text = "📍 Verified: $landmarkText"
             binding.cardLandmarkConfirmation.isVisible = true
@@ -251,6 +246,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun clearDestination() {
+        landmarkJob?.cancel()
         binding.etDestName.setText("")
         binding.etLatitude.setText("")
         binding.etLongitude.setText("")
@@ -266,6 +262,7 @@ class MainActivity : AppCompatActivity() {
             .remove("PREF_DEST_LNG")
             .apply()
 
+        updateUiFromTrackingState(ServiceEventBus.trackingState.value)
         Toast.makeText(this, "Destination cleared", Toast.LENGTH_SHORT).show()
     }
 
@@ -340,12 +337,6 @@ class MainActivity : AppCompatActivity() {
             val currentLat = binding.etLatitude.text.toString().toDoubleOrNull()
             val currentLng = binding.etLongitude.text.toString().toDoubleOrNull()
             val mapPicker = MapPickerBottomSheet.newInstance(currentLat, currentLng)
-            mapPicker.setOnDestinationSelectedListener(object : MapPickerBottomSheet.OnDestinationSelectedListener {
-                override fun onDestinationSelected(name: String, latitude: Double, longitude: Double) {
-                    setDestination(name, latitude, longitude)
-                    Toast.makeText(this@MainActivity, "Destination set: $name", Toast.LENGTH_SHORT).show()
-                }
-            })
             mapPicker.show(supportFragmentManager, MapPickerBottomSheet.TAG)
         }
 
@@ -368,11 +359,12 @@ class MainActivity : AppCompatActivity() {
             stopTrackingService()
         }
 
-        // 5. Test Sensory Alert Channels (Headphones, Volume, Haptics)
-        binding.btnTestAlert.setOnClickListener {
-            val state = com.shadowprotectors.alarmapp.alert.DeviceStateHelper.getDeviceAudioState(this)
-            Toast.makeText(this, "Testing Alert Channels\n${state.summary()}", Toast.LENGTH_LONG).show()
-            testAlertManager?.triggerTestAlert()
+        binding.btnHelp.setOnClickListener {
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.help_title)
+                .setMessage(R.string.help_content)
+                .setPositiveButton(R.string.help_close, null)
+                .show()
         }
     }
 
@@ -408,13 +400,6 @@ class MainActivity : AppCompatActivity() {
         refreshGpsAndLocationState(showToast = false)
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        testAlertManager = null
-        voiceAlertHelper?.shutdown()
-        voiceAlertHelper = null
-    }
-
     private fun showImportLinkDialog() {
         val dialogBinding = DialogImportLinkBinding.inflate(LayoutInflater.from(this))
         val dialog = AlertDialog.Builder(this)
@@ -427,6 +412,9 @@ class MainActivity : AppCompatActivity() {
 
         fun triggerParse(input: String) {
             parseJob?.cancel()
+            resolvedLocation = null
+            resolvedName = null
+            dialogBinding.btnConfirmImport.isEnabled = false
             val text = input.trim()
             if (text.isEmpty()) {
                 dialogBinding.layoutParsingStatus.isVisible = false
@@ -445,6 +433,7 @@ class MainActivity : AppCompatActivity() {
                     resolvedLocation = parsed
                     val name = geocodingHelper.reverseGeocode(parsed.latitude, parsed.longitude)
                     resolvedName = name
+                    dialogBinding.btnConfirmImport.isEnabled = true
 
                     dialogBinding.layoutParsingStatus.isVisible = false
                     dialogBinding.tvResolvedTitle.text = name
@@ -490,6 +479,8 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        dialog.setOnDismissListener { parseJob?.cancel() }
+        dialogBinding.btnConfirmImport.isEnabled = false
         dialog.show()
     }
 
@@ -519,6 +510,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun startTrip(request: com.shadowprotectors.alarmapp.data.TripStartRequest) {
+        if (isCurrentlyTracking) {
+            Toast.makeText(this, "Stop the current trip before choosing another destination", Toast.LENGTH_SHORT).show()
+            return
+        }
         setDestination(request.destinationName, request.latitude, request.longitude)
         selectedTripMode = request.tripMode
         selectedLanguageCode = request.languageCode
@@ -534,7 +529,7 @@ class MainActivity : AppCompatActivity() {
         val lat = latStr.toDoubleOrNull()
         val lng = lngStr.toDoubleOrNull()
 
-        if (lat == null || lng == null) {
+        if (lat == null || lng == null || !lat.isFinite() || !lng.isFinite() || lat !in -90.0..90.0 || lng !in -180.0..180.0) {
             Toast.makeText(this, "Please enter valid Latitude & Longitude", Toast.LENGTH_SHORT).show()
             return
         }
@@ -554,7 +549,6 @@ class MainActivity : AppCompatActivity() {
     private fun stopTrackingService() {
         LocationTrackingService.stopService(this)
         com.shadowprotectors.alarmapp.alert.AudioAlarmHelper.stopFullAlarm(this)
-        voiceAlertHelper?.stop()
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         notificationManager.cancelAll()
         ServiceEventBus.resetState()
@@ -574,6 +568,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateUiFromTrackingState(state: TrackingState) {
         isCurrentlyTracking = state.isTracking
+        binding.btnOpenMapPicker.isEnabled = !state.isTracking
+        binding.btnImportLink.isEnabled = !state.isTracking
+        binding.btnClearDestination.isEnabled = !state.isTracking
         val uiState = resolveBusUiState(state)
         renderBusUiState(uiState)
     }
