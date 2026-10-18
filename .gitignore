@@ -46,7 +46,6 @@ captures/
 # Keystore files (Secrets & signing keys)
 *.jks
 *.keystore
-!debug.keystore
 
 # Google Services (Private API keys)
 google-services.json
@@ -61,4 +60,23 @@ plan/
 .agents/
 graphify-out/
 !README.md
-!VERSION_LOG.md
+
+# Editor and local workspace files
+.vscode/
+.codex/
+
+# Credentials and private environment configuration
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+key.properties
+keystore.properties
+signing.properties
+credentials.json
+service-account*.json
+
+# Internal release notes
+/VERSION_LOG.md

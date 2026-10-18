@@ -1,142 +1,76 @@
-# WayPoint
+<p align="center">
+  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" alt="WayPoint app icon" width="96" />
+</p>
 
-[![Organization](https://img.shields.io/badge/Organization-Shadow--Protectors-1E88E5.svg)](https://github.com/Shadow-Protectors)
-[![Platform](https://img.shields.io/badge/Platform-Android%20%28Kotlin%29-3DDC84.svg)](https://developer.android.com)
-[![Target SDK](https://img.shields.io/badge/Target%20SDK-35%20%28Android%2015%29-brightgreen.svg)]()
-[![Min SDK](https://img.shields.io/badge/Min%20SDK-24%20%28Android%207.0%29-orange.svg)]()
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)]()
+<h1 align="center">WayPoint</h1>
 
-**WayPoint** is an intelligent, location-aware travel alarm and proximity alert system developed by **Shadow-Protectors**. Engineered for public transit commuters, train passengers, and long-distance travelers, WayPoint ensures you never miss your destination stop, railway junction, or interchange due to sleep or distraction.
+<p align="center"><strong>A travel alarm that follows your destination.</strong></p>
+<p align="center">Location-based reminders for passengers who want to spend less time watching the map.</p>
 
-Unlike standard clock-based alarms that fail when buses or trains face delays, WayPoint continuously tracks your real-time position, trajectory, and estimated time of arrival (ETA) to trigger staged alerts as you approach your target.
+<p align="center">
+  <img src="https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&amp;logo=android&amp;logoColor=white" alt="Android" />
+  <img src="https://img.shields.io/badge/Kotlin-7F52FF?style=for-the-badge&amp;logo=kotlin&amp;logoColor=white" alt="Kotlin" />
+  <img src="https://img.shields.io/badge/Gradle-02303A?style=for-the-badge&amp;logo=gradle&amp;logoColor=white" alt="Gradle" />
+  <img src="https://img.shields.io/badge/SQLite-003B57?style=for-the-badge&amp;logo=sqlite&amp;logoColor=white" alt="SQLite" />
+  <img src="https://img.shields.io/badge/OpenStreetMap-7EBC6F?style=for-the-badge&amp;logo=openstreetmap&amp;logoColor=white" alt="OpenStreetMap" />
+</p>
 
----
+## The problem
 
-## Key Features
+A passenger can miss a stop while sleeping, listening to music, or travelling through an unfamiliar area. A clock alarm is only an estimate: traffic and unexpected delays change when the destination will actually be near. Checking a map throughout the journey takes attention and makes it harder to rest.
 
-### 1. 4-Stage Tiered Alert Progression
-WayPoint replaces abrupt, single-point alarms with a gradual 4-level progressive alerting system:
+## The solution
 
-| Level | Alert Type | Bus/Car Threshold | Train Threshold | Action & Feedback |
-| :--- | :--- | :--- | :--- | :--- |
-| **Level 1** | **Silent Heads-Up** | 5.0 km out | 15 min ETA | Updates persistent notification banner with real-time distance and ETA. |
-| **Level 2** | **Vibration Pulse** | 2.0 km out | 7 min ETA | Dual vibration pulses to gently prepare you to collect your luggage. |
-| **Level 3** | **Voice Alert (TTS)** | 1.0 km out | 3 min ETA | Spoken voice announcement in your selected language. |
-| **Level 4** | **Critical Emergency Alarm** | 0.5 km out | 1 min ETA | Full-screen wake-up screen, ringtone override at 100% volume, and continuous vibration. |
+WayPoint connects the alarm to a chosen location. It monitors proximity during a trip and increases the urgency of its reminders as the passenger gets closer. A gentle heads-up gives time to prepare; voice guidance and a stronger wake-up alarm draw attention near the destination.
 
-### 2. Multi-Modal Travel Engines
-- **Bus / Car Mode**: Optimized for road transit with distance-based thresholds, 5-second GPS polling, and an 85-degree bearing tolerance.
-- **Train Express Mode**: Designed for high-speed rail and variable velocities. Evaluates real-time ETA thresholds, operates on a 3-second GPS polling cycle, and applies a tighter 60-degree directional cone.
+The app brings destination selection, saved places, background tracking, and multilingual reminders into one Android experience. Its goal is to help passengers notice their stop without continuously checking their phones.
 
-### 3. Direction & Trajectory Filtering (Anti-False Alarm)
-- **Sliding-Window Vector Tracking**: Analyzes recent coordinate history using WGS84 geodesic distance and bearing calculations.
-- **Approach vs. Receding Detection**: Distinguishes between approaching your destination, departing on an opposite track, or passing on a detour loop.
-- **Receding Warning**: Alerts travelers if they are moving away from their intended destination.
-- **Tunnel & GPS Gap Recovery**: Automatically handles signal dropouts (such as railway tunnels or underground stations) by resetting motion windows upon re-acquisition to prevent false triggers.
+## Progressive alerts
 
-### 4. Multilingual Voice Alerts (TTS)
-WayPoint speaks proximity announcements and arrival warnings in multiple languages:
-- **English**
-- **Tamil (தமிழ்)**
-- **Hindi (हिन्दी)**
+The default Bus / Car experience uses four distance-based stages:
 
-### 5. Failsafe Audio and Silent Mode Override
-- **Phone Ringtone Integration**: Uses the device phone ringtone (`RingtoneManager.TYPE_RINGTONE`) as the primary alert tone.
-- **System Volume Maximization**: Automatically ramps `STREAM_RING`, `STREAM_ALARM`, `STREAM_MUSIC`, and `STREAM_NOTIFICATION` to 100% full volume.
-- **Synthetic AudioTrack Siren**: If ringtone streams are suppressed by system policies or Do Not Disturb, a synthetic dual-frequency (880 Hz / 1760 Hz) PCM AudioTrack siren activates to ensure the alarm is heard.
+| Distance to destination | Stage | What the passenger receives |
+| --- | --- | --- |
+| 5 km | Heads-up | A gentle chime and vibration |
+| 2 km | Proximity | Stronger vibration and attention pings |
+| 1 km | Voice guidance | A spoken destination reminder |
+| 0.5 km | Wake-up | A continuous alarm and vibration until dismissed |
 
-### 6. Seamless Destination Input & Share Sheet Support
-- **Interactive OSM Map Picker**: Embedded OpenStreetMap (`osmdroid`) bottom sheet with live pin dropping and radius visualization.
-- **Hybrid Geocoding**: Android native Geocoder with local proximity bounding, backed by Photon/Nominatim OSM search for pinpoint transit landmarks and bus stops.
-- **Android Share Sheet Integration**: Share locations directly to WayPoint from Google Maps, WhatsApp messages, short links (`maps.app.goo.gl`, `goo.gl/maps`), or `geo:` URIs.
-- **Offline SQLite Storage**: Save favorite destinations and presets for instant one-tap tracking.
+Stages can be skipped when a trip starts close to the destination. Distances are straight-line estimates from location updates, not remaining road distance. A wake-up alert means the destination is nearby; it does not confirm that the vehicle has reached the stop.
 
----
+## Made for everyday journeys
 
-## Architecture Overview
+- **Flexible destination selection:** Search for a place, position a map pin, or import a shared map link.
+- **Saved places:** Keep frequently used destinations on the device for repeat trips.
+- **Background trip status:** Follow distance and estimated arrival through the app and a foreground notification.
+- **Voice reminders:** English, Tamil, and Hindi announcements, with English fallback when the selected voice is unavailable.
+- **Direction awareness:** Use recent movement to distinguish approaching, moving away, and detours.
+- **Clear trip controls:** Review the selected destination, return from the map picker, and stop tracking or dismiss an alarm.
+- **In-app Help:** Find destination setup guidance and an explanation of progressive alerts from the main screen.
 
-```
-app/src/main/java/com/shadowprotectors/alarmapp/
-├── MainActivity.kt                # Primary dashboard, map sheet controller, permission flow
-├── alert/
-│   ├── AlertManager.kt           # State machine evaluating distance/ETA progression
-│   ├── AudioAlarmHelper.kt       # Audio focus, ringtone loops, and emergency AudioTrack siren
-│   └── VoiceAlertHelper.kt       # Text-To-Speech engine (English, Tamil, Hindi)
-├── data/
-│   ├── DatabaseHelper.kt         # SQLite storage for saved and preset destinations
-│   └── Destination.kt            # Destination entity model
-├── engine/
-│   ├── DirectionFilter.kt        # Vector trajectory and approach/receding classification
-│   ├── DistanceEngine.kt         # WGS84 distance, bearing calculation, and dynamic ETA estimation
-│   ├── TripMode.kt               # Bus/Car and Train mode profiles and alert thresholds
-│   └── BusUiState.kt             # UI state representation
-├── service/
-│   ├── LocationTrackingService.kt# Foreground GPS tracking service with WakeLock support
-│   └── ServiceEventBus.kt        # Reactive Kotlin SharedFlow event communication
-├── ui/
-│   ├── AlarmTriggerActivity.kt   # Full-screen lock screen wake-up interface
-│   ├── MapPickerBottomSheet.kt   # Interactive OsmDroid map sheet with search and pin drop
-│   └── SearchResultAdapter.kt    # Geocoding search results list adapter
-└── util/
-    ├── GeocodingHelper.kt        # Native geocoder with Photon OSM fallback
-    ├── LocationLinkParser.kt     # Deep link parser for Google Maps, geo URIs, and WhatsApp text
-    └── NotificationHelper.kt     # Notification channels, foreground notification builder
-```
+## Technology
+
+| Technology | Role |
+| --- | --- |
+| Kotlin & coroutines | Application logic and asynchronous work |
+| Android SDK & AndroidX | Native Android lifecycle, activities, and background services |
+| Material Components & XML layouts | Interface controls and screens |
+| Google Play services Location | Device location updates |
+| OpenStreetMap & osmdroid | Interactive destination map |
+| Android Geocoder & Photon | Place search and address lookup |
+| Room & SQLite | On-device saved destinations |
+| Android Text-to-Speech & audio APIs | Spoken reminders, alarm sounds, and vibration |
+| Gradle & KSP | Build tooling and Room code generation |
+| JUnit & Robolectric | Automated workflow regression checks |
+
+Supports Android 7.0 and later; targets Android 15.
+
+## Data and device behaviour
+
+Saved destinations are stored on the device, and trip distance and alert decisions are calculated locally. Map tiles, place search, address lookup, and shared-link resolution can contact external providers. These requests may include search text, coordinates, or the selected map area.
+
+Tracking uses device location after a destination is selected. Fresh map data and online search need an internet connection. Voice availability depends on installed speech services; alert delivery also depends on location access, notification permissions, device settings, and Android background restrictions.
 
 ---
 
-## Getting Started
-
-### Prerequisites
-- Android Studio Ladybug (2024.2.1) or newer
-- JDK 17
-- Android SDK 35 (Android 15)
-- Physical Android device with GPS capabilities (recommended for live testing)
-
-### Clone & Build
-
-```bash
-# Clone the repository
-git clone https://github.com/Shadow-Protectors/WayPoint.git
-
-# Navigate to project directory
-cd WayPoint
-
-# Build debug APK
-./gradlew assembleDebug
-
-# Build release APK
-./gradlew assembleRelease
-```
-
----
-
-## Permissions & Privacy
-
-WayPoint requires the following permissions to ensure continuous operation while traveling:
-
-| Permission | Purpose |
-| :--- | :--- |
-| `ACCESS_FINE_LOCATION` | Accurate GPS coordinates for distance and bearing calculations |
-| `ACCESS_BACKGROUND_LOCATION` | Uninterrupted tracking when the phone is locked or app is in background |
-| `FOREGROUND_SERVICE_LOCATION` | Persistent foreground execution with notification status |
-| `WAKE_LOCK` | Keeps the CPU active during critical alert evaluation |
-| `USE_FULL_SCREEN_INTENT` | Displays the emergency wake-up alarm over the lock screen |
-| `MODIFY_AUDIO_SETTINGS` | Maximizes volume and ensures alarms sound in silent environments |
-| `POST_NOTIFICATIONS` | Displays continuous tracking updates on Android 13+ |
-
-All location processing runs entirely on-device. WayPoint does not transmit your personal location data or route history to any external server.
-
----
-
-## Organization & Authors
-
-Developed and maintained by **[Shadow-Protectors](https://github.com/Shadow-Protectors)**.
-
-Contributions, issues, and feature requests are welcome. Feel free to check the [Issues](https://github.com/Shadow-Protectors/WayPoint/issues) page.
-
----
-
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+Developed by **[Shadow-Protectors](https://github.com/Shadow-Protectors)**.
