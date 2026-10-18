@@ -7,10 +7,60 @@
         <item name="colorSecondary">@color/accent</item>
         <item name="colorSurface">@color/surface_card</item>
         <item name="colorOnSurface">@color/text_primary</item>
+        <item name="colorOnSurfaceVariant">@color/text_secondary</item>
+
+        <!-- High-Contrast Dialogs & BottomSheets -->
+        <item name="materialAlertDialogTheme">@style/CustomMaterialAlertDialog</item>
+        <item name="bottomSheetDialogTheme">@style/CustomBottomSheetDialogTheme</item>
+
         <item name="android:colorBackground">@color/background_light</item>
         <item name="android:statusBarColor">@color/primary_dark</item>
         <item name="android:navigationBarColor">@color/primary_dark</item>
         <item name="android:windowBackground">@color/background_light</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
         <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
+    </style>
+
+    <!-- High-Contrast Dialog Theme (Crisp White Card with Dark Readable Typography) -->
+    <style name="CustomMaterialAlertDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item name="colorSurface">#FFFFFF</item>
+        <item name="colorOnSurface">#0F172A</item>
+        <item name="colorOnSurfaceVariant">#475569</item>
+        <item name="colorPrimary">#2563EB</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="android:textColorPrimary">#0F172A</item>
+        <item name="android:textColorSecondary">#475569</item>
+        <item name="materialAlertDialogTitleTextStyle">@style/CustomAlertDialogTitle</item>
+        <item name="materialAlertDialogBodyTextStyle">@style/CustomAlertDialogBody</item>
+        <item name="buttonBarPositiveButtonStyle">@style/CustomAlertDialogButton</item>
+        <item name="buttonBarNegativeButtonStyle">@style/CustomAlertDialogButton</item>
+        <item name="buttonBarNeutralButtonStyle">@style/CustomAlertDialogButton</item>
+    </style>
+
+    <style name="CustomAlertDialogTitle" parent="MaterialAlertDialog.Material3.Title.Text">
+        <item name="android:textColor">#0F172A</item>
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="CustomAlertDialogBody" parent="MaterialAlertDialog.Material3.Body.Text">
+        <item name="android:textColor">#334155</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="CustomAlertDialogButton" parent="Widget.Material3.Button.TextButton">
+        <item name="android:textColor">#2563EB</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="CustomBottomSheetDialogTheme" parent="ThemeOverlay.Material3.BottomSheetDialog">
+        <item name="colorSurface">#FFFFFF</item>
+        <item name="colorOnSurface">#0F172A</item>
+        <item name="bottomSheetStyle">@style/CustomBottomSheetStyle</item>
+    </style>
+
+    <style name="CustomBottomSheetStyle" parent="Widget.Material3.BottomSheet">
+        <item name="backgroundTint">#FFFFFF</item>
     </style>
 </resources>

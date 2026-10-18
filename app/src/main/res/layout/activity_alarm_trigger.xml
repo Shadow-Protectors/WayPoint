@@ -86,7 +86,7 @@
         android:layout_width="match_parent"
         android:layout_height="60dp"
         android:layout_marginTop="40dp"
-        android:text="I am Awake — Stop Alarm"
+        android:text="I am Awake: Stop Alarm"
         android:textSize="17sp"
         android:textStyle="bold"
         app:cornerRadius="16dp"

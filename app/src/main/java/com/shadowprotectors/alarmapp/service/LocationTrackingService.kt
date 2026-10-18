@@ -45,20 +45,25 @@ class LocationTrackingService : Service() {
         const val EXTRA_LANG_CODE = "EXTRA_LANG_CODE"
         const val EXTRA_TRIP_MODE = "EXTRA_TRIP_MODE"
 
-        fun startService(context: Context, destName: String, lat: Double, lng: Double, langCode: String = "en", modeName: String = "BUS_CAR") {
+        fun startService(context: Context, request: com.shadowprotectors.alarmapp.data.TripStartRequest) {
             val intent = Intent(context, LocationTrackingService::class.java).apply {
                 action = ACTION_START
-                putExtra(EXTRA_DEST_NAME, destName)
-                putExtra(EXTRA_DEST_LAT, lat)
-                putExtra(EXTRA_DEST_LNG, lng)
-                putExtra(EXTRA_LANG_CODE, langCode)
-                putExtra(EXTRA_TRIP_MODE, modeName)
+                putExtra(EXTRA_DEST_NAME, request.destinationName)
+                putExtra(EXTRA_DEST_LAT, request.latitude)
+                putExtra(EXTRA_DEST_LNG, request.longitude)
+                putExtra(EXTRA_LANG_CODE, request.languageCode)
+                putExtra(EXTRA_TRIP_MODE, request.tripMode.name)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {
                 context.startService(intent)
             }
+        }
+
+        fun startService(context: Context, destName: String, lat: Double, lng: Double, langCode: String = "en", modeName: String = "BUS_CAR") {
+            val mode = try { com.shadowprotectors.alarmapp.engine.TripMode.valueOf(modeName) } catch (_: Exception) { com.shadowprotectors.alarmapp.engine.TripMode.BUS_CAR }
+            startService(context, com.shadowprotectors.alarmapp.data.TripStartRequest(destName, lat, lng, mode, langCode))
         }
 
         fun updateLanguage(context: Context, langCode: String) {
@@ -106,7 +111,7 @@ class LocationTrackingService : Service() {
 
     private var activeProfile = com.shadowprotectors.alarmapp.engine.AlertProfileResolver.resolve(com.shadowprotectors.alarmapp.engine.TripMode.BUS_CAR)
 
-    // Cached once at start — never changes during a tracking session
+    // Cached once at start: never changes during a tracking session
     private var stopPendingIntent: PendingIntent? = null
 
     // Guards: skip notification/UI emit if nothing meaningful changed
@@ -270,7 +275,7 @@ class LocationTrackingService : Service() {
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // 1. Update Foreground Persistent Notification — only when distance changed by > 100 m
+        // 1. Update Foreground Persistent Notification: only when distance changed by > 100 m
         val pendingIntent = stopPendingIntent!!
         if (Math.abs(distanceKm - lastNotifiedDistanceKm) > 0.1 || lastNotifiedDistanceKm == Double.MAX_VALUE) {
             lastNotifiedDistanceKm = distanceKm
@@ -303,7 +308,7 @@ class LocationTrackingService : Service() {
             }
         }
 
-        // 3. Broadcast to UI EventBus — only when state meaningfully changed
+        // 3. Broadcast to UI EventBus: only when state meaningfully changed
         //    Avoids redundant StateFlow emissions and UI redraws when screen is off.
         val newState = TrackingState(
             isTracking = true,

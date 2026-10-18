@@ -29,14 +29,49 @@ object AudioAlarmHelper {
 
     private var audioFocusRequest: android.media.AudioFocusRequest? = null
 
+    @Volatile
+    private var alertPingHandler: android.os.Handler? = null
+
+    @Volatile
+    private var alertPingRunnable: Runnable? = null
+
+    @Volatile
+    private var alertStopRunnable: Runnable? = null
+
+    @Volatile
+    private var currentToneGen: android.media.ToneGenerator? = null
+
     /**
-     * Triggers Level 2 vibration pulse (gentle alert).
+     * Stops any active repeating ping alert and releases tone generator.
      */
     @Synchronized
-    fun playLevel2Vibration(context: Context) {
+    private fun stopAlertPing() {
         try {
-            val vibrator = getVibrator(context)
-            val pattern = longArrayOf(0, 500, 200, 500)
+            alertPingHandler?.removeCallbacksAndMessages(null)
+            alertPingHandler = null
+            alertPingRunnable = null
+            alertStopRunnable = null
+
+            currentToneGen?.let {
+                try { it.stopTone() } catch (_: Exception) {}
+                try { it.release() } catch (_: Exception) {}
+            }
+            currentToneGen = null
+        } catch (e: Exception) {
+            Log.e("AudioAlarmHelper", "Error stopping alert ping: ${e.message}")
+        }
+    }
+
+    /**
+     * Triggers Level 1 alert (Heads-Up):
+     * Noticeable double haptic pulse + gentle chime tone so user notices even with phone in pocket.
+     */
+    @Synchronized
+    fun playLevel1Alert(context: Context) {
+        val appContext = context.applicationContext
+        try {
+            val vibrator = getVibrator(appContext)
+            val pattern = longArrayOf(0, 250, 150, 250)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1))
             } else {
@@ -44,8 +79,89 @@ object AudioAlarmHelper {
                 vibrator.vibrate(pattern, -1)
             }
         } catch (e: Exception) {
-            Log.e("AudioAlarmHelper", "Error in playLevel2Vibration: ${e.message}")
+            Log.e("AudioAlarmHelper", "Error in playLevel1Alert vibration: ${e.message}")
         }
+
+        try {
+            val toneGen = android.media.ToneGenerator(AudioManager.STREAM_NOTIFICATION, 85)
+            toneGen.startTone(android.media.ToneGenerator.TONE_PROP_BEEP2, 300)
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                try { toneGen.release() } catch (_: Exception) {}
+            }, 600)
+        } catch (e: Exception) {
+            Log.e("AudioAlarmHelper", "Error playing Level 1 chime: ${e.message}")
+        }
+    }
+
+    /**
+     * Triggers Level 2 alert (Proximity Attention):
+     * Heavy rhythmic pulse train + dual sonar attention ping on STREAM_ALARM.
+     * Duration: 25 seconds (between 20 and 30 sec) as requested.
+     */
+    @Synchronized
+    fun playLevel2Alert(context: Context, durationMs: Long = 25000L) {
+        val appContext = context.applicationContext
+
+        // Stop any previous ping alert cycle
+        stopAlertPing()
+
+        // 1. Repeat Heavy Vibration Pattern for 25 seconds
+        try {
+            val vibrator = getVibrator(appContext)
+            val pattern = longArrayOf(0, 500, 200, 500, 200, 700)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createWaveform(pattern, 0)) // 0 = repeat continuously
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(pattern, 0)
+            }
+        } catch (e: Exception) {
+            Log.e("AudioAlarmHelper", "Error in playLevel2Alert vibration: ${e.message}")
+        }
+
+        // 2. Play Rhythmic Ping Tone every 1.5s on STREAM_ALARM for 25 seconds
+        try {
+            val toneGen = android.media.ToneGenerator(AudioManager.STREAM_ALARM, 95)
+            currentToneGen = toneGen
+
+            val handler = android.os.Handler(android.os.Looper.getMainLooper())
+            alertPingHandler = handler
+
+            val pingRunnable = object : Runnable {
+                override fun run() {
+                    try {
+                        toneGen.startTone(android.media.ToneGenerator.TONE_CDMA_ALERT_AUTOREDIAL_LITE, 500)
+                    } catch (e: Exception) {
+                        Log.e("AudioAlarmHelper", "Error in ping runnable: ${e.message}")
+                    }
+                    handler.postDelayed(this, 1500L)
+                }
+            }
+            alertPingRunnable = pingRunnable
+            handler.post(pingRunnable)
+
+            // 3. Auto-stop after specified duration (25 seconds)
+            val stopRunnable = Runnable {
+                stopAlertPing()
+                try {
+                    val vibrator = getVibrator(appContext)
+                    vibrator.cancel()
+                } catch (_: Exception) {}
+            }
+            alertStopRunnable = stopRunnable
+            handler.postDelayed(stopRunnable, durationMs)
+
+        } catch (e: Exception) {
+            Log.e("AudioAlarmHelper", "Error playing Level 2 ping: ${e.message}")
+        }
+    }
+
+    /**
+     * Legacy alias for Level 2 alert.
+     */
+    @Synchronized
+    fun playLevel2Vibration(context: Context) {
+        playLevel2Alert(context)
     }
 
     /**
@@ -62,7 +178,7 @@ object AudioAlarmHelper {
         // 1. Continuous Alarm Vibration
         try {
             val vibrator = getVibrator(appContext)
-            val alarmVibratePattern = longArrayOf(0, 800, 400, 800, 400)
+            val alarmVibratePattern = longArrayOf(0, 1000, 300, 1000, 300)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 vibrator.vibrate(VibrationEffect.createWaveform(alarmVibratePattern, 0)) // 0 = repeat indefinitely
             } else {
@@ -73,10 +189,27 @@ object AudioAlarmHelper {
             Log.e("AudioAlarmHelper", "Error starting vibrator: ${e.message}")
         }
 
-        // 2. Maximize all stream volumes (RING, ALARM, MUSIC, NOTIFICATION) to guarantee full volume even if phone ringtone or alarm volume was turned down
+        // 2. Maximize Audio Streams
         val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val notificationManager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
+
+        // Maximize STREAM_ALARM first (does not require DND policy access on Android)
         try {
-            if (audioManager.ringerMode != AudioManager.RINGER_MODE_NORMAL) {
+            val maxAlarmVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarmVol, 0)
+        } catch (e: Exception) {
+            Log.w("AudioAlarmHelper", "Could not set STREAM_ALARM volume: ${e.message}")
+        }
+
+        // Maximize STREAM_RING, STREAM_MUSIC, STREAM_NOTIFICATION if policy access permits
+        try {
+            val canModifyRinger = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                notificationManager?.isNotificationPolicyAccessGranted == true
+            } else {
+                true
+            }
+
+            if (canModifyRinger && audioManager.ringerMode != AudioManager.RINGER_MODE_NORMAL) {
                 try {
                     audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
                 } catch (e: Exception) {
@@ -86,7 +219,6 @@ object AudioAlarmHelper {
 
             val streamsToMaximize = intArrayOf(
                 AudioManager.STREAM_RING,
-                AudioManager.STREAM_ALARM,
                 AudioManager.STREAM_MUSIC,
                 AudioManager.STREAM_NOTIFICATION
             )
@@ -99,7 +231,7 @@ object AudioAlarmHelper {
                 }
             }
         } catch (e: Exception) {
-            Log.w("AudioAlarmHelper", "Could not set stream volume (DND policy or system restriction): ${e.message}")
+            Log.w("AudioAlarmHelper", "Could not set stream volume (DND policy restriction): ${e.message}")
         }
 
         // 3. Request transient exclusive Audio Focus with USAGE_ALARM to interrupt headphones / music
@@ -110,6 +242,7 @@ object AudioAlarmHelper {
                         AudioAttributes.Builder()
                             .setUsage(AudioAttributes.USAGE_ALARM)
                             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
                             .build()
                     )
                     .setAcceptsDelayedFocusGain(false)
@@ -245,6 +378,9 @@ object AudioAlarmHelper {
     @Synchronized
     fun stopFullAlarm(context: Context) {
         val appContext = context.applicationContext
+
+        // 0. Stop repeating ping alert and timer
+        stopAlertPing()
 
         // 1. Cancel Vibrator via all managers
         try {

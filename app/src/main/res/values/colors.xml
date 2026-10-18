@@ -7,7 +7,7 @@
     <color name="accent">#0EA5E9</color>
     <color name="accent_dim">#0284C7</color>
 
-    <!-- Surfaces — Clean White -->
+    <!-- Surfaces: Clean White -->
     <color name="background_light">#F1F5F9</color>
     <color name="surface_card">#FFFFFF</color>
     <color name="card_stroke">#E2E8F0</color>
@@ -19,22 +19,22 @@
     <color name="text_muted">#94A3B8</color>
     <color name="text_accent">#2563EB</color>
 
-    <!-- Status: Green — APPROACHING -->
+    <!-- Status: Green: APPROACHING -->
     <color name="status_green">#16A34A</color>
     <color name="status_green_bg">#DCFCE7</color>
     <color name="status_green_text">#15803D</color>
 
-    <!-- Status: Amber — WARNING -->
+    <!-- Status: Amber: WARNING -->
     <color name="status_amber">#D97706</color>
     <color name="status_amber_bg">#FEF3C7</color>
     <color name="status_amber_text">#B45309</color>
 
-    <!-- Status: Red — ALARM -->
+    <!-- Status: Red: ALARM -->
     <color name="status_red">#DC2626</color>
     <color name="status_red_bg">#FEE2E2</color>
     <color name="status_red_text">#B91C1C</color>
 
-    <!-- Status: Violet — VOICE LEVEL 3 -->
+    <!-- Status: Violet: VOICE LEVEL 3 -->
     <color name="status_violet">#7C3AED</color>
     <color name="status_violet_bg">#EDE9FE</color>
     <color name="status_violet_text">#5B21B6</color>

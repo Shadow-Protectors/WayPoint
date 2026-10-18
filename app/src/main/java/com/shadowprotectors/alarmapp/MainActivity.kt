@@ -51,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     private var selectedTripMode: com.shadowprotectors.alarmapp.engine.TripMode = com.shadowprotectors.alarmapp.engine.TripMode.BUS_CAR
     private var isCurrentlyTracking = false
     private var voiceAlertHelper: com.shadowprotectors.alarmapp.alert.VoiceAlertHelper? = null
+    private var testAlertManager: com.shadowprotectors.alarmapp.alert.AlertManager? = null
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -65,6 +66,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private lateinit var savedLocationRepository: com.shadowprotectors.alarmapp.data.SavedLocationRepository
+    private lateinit var savedLocationAdapter: com.shadowprotectors.alarmapp.ui.SavedLocationAdapter
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -72,6 +76,11 @@ class MainActivity : AppCompatActivity() {
 
         databaseHelper = DatabaseHelper(this)
         geocodingHelper = GeocodingHelper(this)
+        voiceAlertHelper = com.shadowprotectors.alarmapp.alert.VoiceAlertHelper(this)
+        testAlertManager = com.shadowprotectors.alarmapp.alert.AlertManager(this, voiceAlertHelper!!)
+
+        val db = com.shadowprotectors.alarmapp.data.AppDatabase.getInstance(this)
+        savedLocationRepository = com.shadowprotectors.alarmapp.data.SavedLocationRepository(db.savedLocationDao())
 
         // Handle edge-to-edge status bar insets properly
         ViewCompat.setOnApplyWindowInsetsListener(binding.coordinatorLayout) { _, insets ->
@@ -80,6 +89,8 @@ class MainActivity : AppCompatActivity() {
             insets
         }
 
+        setupSavedLocationsRecyclerView()
+        observeSavedLocations()
         setupLanguageButtons()
         setupListeners()
         observeTrackingState()
@@ -177,7 +188,7 @@ class MainActivity : AppCompatActivity() {
             binding.etLongitude.setText(String.format(Locale.US, "%.5f", lng))
             updateLandmarkConfirmation(lat, lng)
         } else {
-            // No destination saved yet — keep fields clean without dummy placeholders
+            // No destination saved yet: keep fields clean without dummy placeholders
             binding.etDestName.setText("")
             binding.etLatitude.setText("")
             binding.etLongitude.setText("")
@@ -191,6 +202,71 @@ class MainActivity : AppCompatActivity() {
             binding.tvLandmarkConfirmation.text = "📍 Verified: $landmarkText"
             binding.cardLandmarkConfirmation.isVisible = true
         }
+    }
+
+    private fun setupSavedLocationsRecyclerView() {
+        savedLocationAdapter = com.shadowprotectors.alarmapp.ui.SavedLocationAdapter(
+            showOptions = false,
+            onItemClick = { savedLoc ->
+                lifecycleScope.launch {
+                    savedLocationRepository.recordUsage(savedLoc.id)
+                }
+                val request = com.shadowprotectors.alarmapp.data.TripStartRequest(
+                    destinationName = savedLoc.customName,
+                    latitude = savedLoc.latitude,
+                    longitude = savedLoc.longitude,
+                    tripMode = selectedTripMode,
+                    languageCode = selectedLanguageCode,
+                    savedLocationId = savedLoc.id
+                )
+                startTrip(request)
+            }
+        )
+        binding.rvSavedLocations.apply {
+            layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this@MainActivity)
+            adapter = savedLocationAdapter
+        }
+
+        binding.btnManageSavedLocations.setOnClickListener {
+            val intent = Intent(this, com.shadowprotectors.alarmapp.ui.ManageSavedLocationsActivity::class.java)
+            startActivity(intent)
+        }
+    }
+
+    private fun observeSavedLocations() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                savedLocationRepository.getAllLocationsFlow().collect { list ->
+                    if (list.isEmpty()) {
+                        binding.layoutEmptySavedLocations.isVisible = true
+                        binding.rvSavedLocations.isVisible = false
+                    } else {
+                        binding.layoutEmptySavedLocations.isVisible = false
+                        binding.rvSavedLocations.isVisible = true
+                        savedLocationAdapter.submitList(list)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun clearDestination() {
+        binding.etDestName.setText("")
+        binding.etLatitude.setText("")
+        binding.etLongitude.setText("")
+        binding.cardLandmarkConfirmation.isVisible = false
+        binding.tvLandmarkConfirmation.text = ""
+        binding.tvDistance.text = "-- km"
+        binding.tvEta.text = "--:--"
+
+        val prefs = getSharedPreferences("travel_alarm_prefs", Context.MODE_PRIVATE)
+        prefs.edit()
+            .remove("PREF_DEST_NAME")
+            .remove("PREF_DEST_LAT")
+            .remove("PREF_DEST_LNG")
+            .apply()
+
+        Toast.makeText(this, "Destination cleared", Toast.LENGTH_SHORT).show()
     }
 
 
@@ -254,9 +330,16 @@ class MainActivity : AppCompatActivity() {
             refreshGpsAndLocationState(showToast = true)
         }
 
+        // Clear destination fields & reset stored preferences
+        binding.btnClearDestination.setOnClickListener {
+            clearDestination()
+        }
+
         // 1. In-App Map Picker
         binding.btnOpenMapPicker.setOnClickListener {
-            val mapPicker = MapPickerBottomSheet.newInstance()
+            val currentLat = binding.etLatitude.text.toString().toDoubleOrNull()
+            val currentLng = binding.etLongitude.text.toString().toDoubleOrNull()
+            val mapPicker = MapPickerBottomSheet.newInstance(currentLat, currentLng)
             mapPicker.setOnDestinationSelectedListener(object : MapPickerBottomSheet.OnDestinationSelectedListener {
                 override fun onDestinationSelected(name: String, latitude: Double, longitude: Double) {
                     setDestination(name, latitude, longitude)
@@ -285,7 +368,12 @@ class MainActivity : AppCompatActivity() {
             stopTrackingService()
         }
 
-
+        // 5. Test Sensory Alert Channels (Headphones, Volume, Haptics)
+        binding.btnTestAlert.setOnClickListener {
+            val state = com.shadowprotectors.alarmapp.alert.DeviceStateHelper.getDeviceAudioState(this)
+            Toast.makeText(this, "Testing Alert Channels\n${state.summary()}", Toast.LENGTH_LONG).show()
+            testAlertManager?.triggerTestAlert()
+        }
     }
 
     private fun refreshGpsAndLocationState(showToast: Boolean = false) {
@@ -322,7 +410,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        testAlertManager = null
         voiceAlertHelper?.shutdown()
+        voiceAlertHelper = null
     }
 
     private fun showImportLinkDialog() {
@@ -428,6 +518,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    fun startTrip(request: com.shadowprotectors.alarmapp.data.TripStartRequest) {
+        setDestination(request.destinationName, request.latitude, request.longitude)
+        selectedTripMode = request.tripMode
+        selectedLanguageCode = request.languageCode
+
+        checkPermissionsAndStart()
+    }
+
     private fun startTrackingService() {
         val name = binding.etDestName.text.toString().trim().ifEmpty { "Destination" }
         val latStr = binding.etLatitude.text.toString()
@@ -441,7 +539,15 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        LocationTrackingService.startService(this, name, lat, lng, selectedLanguageCode, selectedTripMode.name)
+        val request = com.shadowprotectors.alarmapp.data.TripStartRequest(
+            destinationName = name,
+            latitude = lat,
+            longitude = lng,
+            tripMode = selectedTripMode,
+            languageCode = selectedLanguageCode
+        )
+
+        LocationTrackingService.startService(this, request)
         Toast.makeText(this, "${selectedTripMode.icon} Background alarm active (${selectedTripMode.displayName})", Toast.LENGTH_SHORT).show()
     }
 
@@ -524,9 +630,13 @@ class MainActivity : AppCompatActivity() {
                 binding.btnToggleTracking.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.primary))
                 binding.btnStopTracking.isVisible = false
 
-                binding.tvStatus.text = "🚌 Bus Alarm Idle — Ready to start"
-                binding.tvDistance.text = ""
-                binding.tvEta.text = ""
+                binding.tvStatus.text = "🚌 Bus Alarm Idle: Ready to start"
+                if (binding.tvDistance.text.isNullOrBlank()) {
+                    binding.tvDistance.text = "-- km"
+                }
+                if (binding.tvEta.text.isNullOrBlank()) {
+                    binding.tvEta.text = "--:--"
+                }
                 binding.tvApproachBadge.text = "Idle"
                 binding.tvApproachBadge.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
                 binding.tvApproachBadge.setBackgroundColor(Color.parseColor("#E2E8F0"))
@@ -536,7 +646,9 @@ class MainActivity : AppCompatActivity() {
 
             is com.shadowprotectors.alarmapp.engine.BusUiState.Empty -> {
                 renderBusUiState(com.shadowprotectors.alarmapp.engine.BusUiState.Idle)
-                binding.tvStatus.text = "No Destination Selected — Pick location below"
+                binding.tvStatus.text = "No Destination Selected: Pick location below"
+                binding.tvDistance.text = "-- km"
+                binding.tvEta.text = "--:--"
                 binding.tvApproachBadge.text = "Empty"
             }
 
@@ -558,6 +670,7 @@ class MainActivity : AppCompatActivity() {
             is com.shadowprotectors.alarmapp.engine.BusUiState.Partial -> {
                 binding.btnToggleTracking.isVisible = false
                 binding.btnStopTracking.isVisible = true
+                binding.btnStopTracking.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.status_red))
                 binding.tvStatus.text = "🟡 ${state.message}"
                 binding.tvDistance.text = "Acquiring…"
                 binding.tvEta.text = "Acquiring GPS fix…"
@@ -570,6 +683,7 @@ class MainActivity : AppCompatActivity() {
             is com.shadowprotectors.alarmapp.engine.BusUiState.Offline -> {
                 binding.btnToggleTracking.isVisible = false
                 binding.btnStopTracking.isVisible = true
+                binding.btnStopTracking.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.status_red))
                 binding.tvStatus.text = "Tracking to ${state.destinationName}"
                 binding.tvDistance.text = String.format(Locale.US, "%.2f km", state.distanceKm)
 
@@ -624,7 +738,7 @@ class MainActivity : AppCompatActivity() {
                     AlertLevel.LEVEL_1_SILENT -> {
                         binding.cardTrackingStatus.setCardBackgroundColor(ContextCompat.getColor(this, R.color.status_green_bg))
                         binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.status_green_text))
-                        binding.tvAlertLevelBadge.text = "🔵 Level 1: Silent Heads-Up Banner (5.0 km)"
+                        binding.tvAlertLevelBadge.text = "🔵 Level 1: Heads-Up Alert (5.0 km)"
                         binding.tvAlertLevelBadge.setTextColor(ContextCompat.getColor(this, R.color.status_green_text))
                         binding.tvAlertLevelBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.status_green_bg))
                     }
@@ -642,8 +756,8 @@ class MainActivity : AppCompatActivity() {
                 binding.btnToggleTracking.isVisible = !isCurrentlyTracking
                 binding.btnStopTracking.isVisible = isCurrentlyTracking
                 binding.tvStatus.text = "🚫 Location (GPS) Disabled in System Settings"
-                binding.tvDistance.text = ""
-                binding.tvEta.text = ""
+                binding.tvDistance.text = "-- km"
+                binding.tvEta.text = "--:--"
                 binding.tvApproachBadge.text = "GPS Off"
                 binding.tvApproachBadge.setTextColor(ContextCompat.getColor(this, R.color.status_red_text))
                 binding.tvApproachBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.status_red_bg))

@@ -147,7 +147,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:text="Ready — Set a destination below"
+                        android:text="Ready: Set a destination below"
                         android:textSize="14sp"
                         android:textColor="@color/text_secondary"
                         android:lineSpacingExtra="2dp" />
@@ -260,14 +260,41 @@
                     android:orientation="vertical"
                     android:padding="18dp">
 
-                    <TextView
-                        android:layout_width="wrap_content"
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="SELECT DESTINATION"
-                        android:textSize="11sp"
-                        android:textStyle="bold"
-                        android:letterSpacing="0.05"
-                        android:textColor="@color/text_secondary" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="SELECT DESTINATION"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.05"
+                            android:textColor="@color/text_secondary" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnClearDestination"
+                            android:layout_width="wrap_content"
+                            android:layout_height="32dp"
+                            android:text="Clear"
+                            android:textSize="11sp"
+                            android:textColor="@color/status_red"
+                            app:icon="@drawable/ic_clear"
+                            app:iconTint="@color/status_red"
+                            app:iconSize="14dp"
+                            app:iconPadding="2dp"
+                            android:paddingHorizontal="8dp"
+                            android:paddingVertical="0dp"
+                            android:minWidth="0dp"
+                            android:minHeight="0dp"
+                            android:backgroundTint="@color/status_red_bg"
+                            style="@style/Widget.Material3.Button.TextButton" />
+
+                    </LinearLayout>
 
                     <!-- Destination Selection Action Buttons -->
                     <LinearLayout
@@ -413,6 +440,99 @@
 
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- 2.5 SAVED LOCATIONS QUICK LIST -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="2dp"
+                app:strokeColor="@color/card_stroke"
+                app:strokeWidth="1dp"
+                app:cardBackgroundColor="@color/surface_card"
+                android:layout_marginBottom="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="18dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="10dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="SAVED LOCATIONS"
+                            android:textSize="11sp"
+                            android:textStyle="bold"
+                            android:letterSpacing="0.05"
+                            android:textColor="@color/text_secondary" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnManageSavedLocations"
+                            android:layout_width="wrap_content"
+                            android:layout_height="32dp"
+                            android:text="Manage"
+                            android:textSize="11sp"
+                            android:textColor="@color/primary"
+                            app:icon="@drawable/ic_location"
+                            app:iconTint="@color/primary"
+                            app:iconSize="14dp"
+                            app:iconPadding="2dp"
+                            android:paddingHorizontal="8dp"
+                            android:paddingVertical="0dp"
+                            android:minWidth="0dp"
+                            android:minHeight="0dp"
+                            style="@style/Widget.Material3.Button.TextButton" />
+
+                    </LinearLayout>
+
+                    <!-- Saved Locations RecyclerView -->
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/rvSavedLocations"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:nestedScrollingEnabled="false" />
+
+                    <!-- Empty State View -->
+                    <LinearLayout
+                        android:id="@+id/layoutEmptySavedLocations"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:padding="16dp"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="No saved locations yet"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_secondary" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Pick a location on the map to save it for 1-tap trip start!"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_muted"
+                            android:gravity="center"
+                            android:layout_marginTop="4dp" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- 3. VOICE LANGUAGE SETTINGS CARD -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
@@ -548,7 +668,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="LEVEL 1 — SILENT"
+                                android:text="LEVEL 1: HEADS-UP"
                                 android:textSize="10sp"
                                 android:textStyle="bold"
                                 android:letterSpacing="0.06"
@@ -556,7 +676,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Wake-up notification"
+                                android:text="Double haptic pulse + gentle chime"
                                 android:textSize="12sp"
                                 android:textColor="@color/text_secondary" />
                         </LinearLayout>
@@ -599,7 +719,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="LEVEL 2 — VIBRATE"
+                                android:text="LEVEL 2: PROXIMITY"
                                 android:textSize="10sp"
                                 android:textStyle="bold"
                                 android:letterSpacing="0.06"
@@ -607,7 +727,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Pack your bags now"
+                                android:text="Triple heavy pulse + sonar ping"
                                 android:textSize="12sp"
                                 android:textColor="@color/text_secondary" />
                         </LinearLayout>
@@ -650,7 +770,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="LEVEL 3 — VOICE"
+                                android:text="LEVEL 3: VOICE GUIDANCE"
                                 android:textSize="10sp"
                                 android:textStyle="bold"
                                 android:letterSpacing="0.06"
@@ -658,7 +778,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Regional TTS announcement"
+                                android:text="Voice alert with audio focus ducking"
                                 android:textSize="12sp"
                                 android:textColor="@color/text_secondary" />
                         </LinearLayout>
@@ -700,7 +820,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="LEVEL 4 — SIREN"
+                                android:text="LEVEL 4: ARRIVAL SIREN"
                                 android:textSize="10sp"
                                 android:textStyle="bold"
                                 android:letterSpacing="0.06"
@@ -708,12 +828,30 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Full wake alarm + max volume"
+                                android:text="Max alarm volume + parallel siren + wake"
                                 android:textSize="12sp"
                                 android:textColor="@color/text_secondary" />
                         </LinearLayout>
 
                     </LinearLayout>
+
+                    <!-- Interactive Sensory Alert Test Button -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnTestAlert"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:layout_marginTop="14dp"
+                        android:text="Test Alert Sound &amp; Vibration"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/primary"
+                        app:icon="@drawable/ic_alarm"
+                        app:iconGravity="textStart"
+                        app:iconPadding="8dp"
+                        app:iconTint="@color/primary"
+                        app:cornerRadius="10dp"
+                        android:backgroundTint="#EFF6FF"
+                        style="@style/Widget.MaterialComponents.Button.UnelevatedButton" />
 
                 </LinearLayout>
 
@@ -739,18 +877,20 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnStopTracking"
                 android:layout_width="match_parent"
-                android:layout_height="52dp"
+                android:layout_height="56dp"
                 android:layout_marginTop="10dp"
                 android:text="Stop Tracking"
-                android:textSize="14sp"
+                android:textSize="15sp"
                 android:textStyle="bold"
-                android:textColor="@color/status_red_text"
+                android:textColor="@color/white"
+                app:icon="@drawable/ic_clear"
+                app:iconGravity="textStart"
+                app:iconPadding="10dp"
+                app:iconTint="@color/white"
                 app:cornerRadius="14dp"
-                android:elevation="4dp"
-                android:visibility="gone"
-                app:strokeColor="@color/status_red"
-                app:strokeWidth="1dp"
-                style="@style/Widget.Material3.Button.OutlinedButton" />
+                android:elevation="6dp"
+                android:backgroundTint="@color/status_red"
+                android:visibility="gone" />
 
 
             <View

@@ -21,6 +21,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 
     <application
         android:allowBackup="false"
@@ -67,6 +68,14 @@
             android:turnScreenOn="true"
             android:launchMode="singleTop"
             android:excludeFromRecents="true"
+            android:theme="@style/Theme.TravelAlarm" />
+
+        <!-- Manage Saved Locations Activity -->
+        <activity
+            android:name=".ui.ManageSavedLocationsActivity"
+            android:exported="false"
+            android:label="Manage Saved Locations"
+            android:parentActivityName=".MainActivity"
             android:theme="@style/Theme.TravelAlarm" />
 
         <!-- Continuous Background GPS & Alert Service -->
