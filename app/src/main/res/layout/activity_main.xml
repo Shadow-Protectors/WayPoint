@@ -48,7 +48,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Offline Destination Alert System"
+                    android:text="Destination travel alarm"
                     android:textSize="11sp"
                     android:letterSpacing="0.04"
                     android:textColor="#93C5FD" />

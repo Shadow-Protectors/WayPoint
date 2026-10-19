@@ -80,3 +80,4 @@ service-account*.json
 
 # Internal release notes
 /VERSION_LOG.md
+*.md

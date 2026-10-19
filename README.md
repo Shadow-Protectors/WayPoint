@@ -65,6 +65,10 @@ Stages can be skipped when a trip starts close to the destination. Distances are
 
 Supports Android 7.0 and later; targets Android 15.
 
+## Launch preparation
+
+The supplied [original logo](branding/WAYPOINT.png) and [512×512 store icon](branding/play-store-icon.png) are included in the repository. Production signing, device testing, legal pages, and deployment remain pending.
+
 ## Data and device behaviour
 
 Saved destinations are stored on the device, and trip distance and alert decisions are calculated locally. Map tiles, place search, address lookup, and shared-link resolution can contact external providers. These requests may include search text, coordinates, or the selected map area.
