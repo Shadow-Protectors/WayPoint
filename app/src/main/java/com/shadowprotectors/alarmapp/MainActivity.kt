@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
-import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.text.Editable
@@ -48,6 +47,10 @@ class MainActivity : AppCompatActivity() {
     private var selectedTripMode: com.shadowprotectors.alarmapp.engine.TripMode = com.shadowprotectors.alarmapp.engine.TripMode.BUS_CAR
     private var isCurrentlyTracking = false
 
+    private val locationSettings = com.shadowprotectors.alarmapp.util.LocationSettingsGate(
+        this, { this }, lifecycle
+    ) { if (!isCurrentlyTracking) startTrackingService() }
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { _ ->
@@ -55,7 +58,7 @@ class MainActivity : AppCompatActivity() {
         val coarseGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
         if (fineGranted || coarseGranted) {
-            startTrackingService()
+            locationSettings.ensureEnabled()
         } else {
             Toast.makeText(this, "Location permission is required for travel alarm", Toast.LENGTH_LONG).show()
         }
@@ -270,7 +273,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupLanguageButtons() {
         val primaryColor = ContextCompat.getColor(this, R.color.primary)
-        val mutedColor = Color.parseColor("#E2E8F0")
+        val mutedColor = ContextCompat.getColor(this, R.color.card_stroke)
         val whiteColor = ContextCompat.getColor(this, R.color.white)
         val darkTextColor = ContextCompat.getColor(this, R.color.text_primary)
 
@@ -494,16 +497,12 @@ class MainActivity : AppCompatActivity() {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            permissions.add(Manifest.permission.FOREGROUND_SERVICE_LOCATION)
-        }
-
         val missing = permissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
 
         if (missing.isEmpty()) {
-            startTrackingService()
+            locationSettings.ensureEnabled()
         } else {
             permissionLauncher.launch(missing.toTypedArray())
         }
@@ -620,6 +619,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderBusUiState(state: com.shadowprotectors.alarmapp.engine.BusUiState) {
+        binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
         when (state) {
             is com.shadowprotectors.alarmapp.engine.BusUiState.Idle -> {
                 binding.btnToggleTracking.isVisible = true
@@ -636,7 +636,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 binding.tvApproachBadge.text = "Idle"
                 binding.tvApproachBadge.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
-                binding.tvApproachBadge.setBackgroundColor(Color.parseColor("#E2E8F0"))
+                binding.tvApproachBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.card_stroke))
                 binding.cardTrackingStatus.setCardBackgroundColor(ContextCompat.getColor(this, R.color.surface_card))
                 binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
             }
@@ -652,8 +652,8 @@ class MainActivity : AppCompatActivity() {
             is com.shadowprotectors.alarmapp.engine.BusUiState.Loading -> {
                 binding.tvStatus.text = "⏳ ${state.message}"
                 binding.tvApproachBadge.text = "Loading"
-                binding.tvApproachBadge.setTextColor(ContextCompat.getColor(this, R.color.primary))
-                binding.tvApproachBadge.setBackgroundColor(Color.parseColor("#EFF6FF"))
+                binding.tvApproachBadge.setTextColor(ContextCompat.getColor(this, R.color.text_accent))
+                binding.tvApproachBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.surface_elevated))
             }
 
             is com.shadowprotectors.alarmapp.engine.BusUiState.Error -> {
@@ -706,7 +706,7 @@ class MainActivity : AppCompatActivity() {
                     ApproachState.UNCERTAIN -> {
                         binding.tvApproachBadge.text = "Locating..."
                         binding.tvApproachBadge.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
-                        binding.tvApproachBadge.setBackgroundColor(Color.parseColor("#E2E8F0"))
+                        binding.tvApproachBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.card_stroke))
                     }
                 }
 
@@ -719,11 +719,11 @@ class MainActivity : AppCompatActivity() {
                         binding.tvAlertLevelBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.status_red_bg))
                     }
                     AlertLevel.LEVEL_3_VOICE -> {
-                        binding.cardTrackingStatus.setCardBackgroundColor(Color.parseColor("#EEF2FF"))
-                        binding.tvStatus.setTextColor(Color.parseColor("#3730A3"))
+                        binding.cardTrackingStatus.setCardBackgroundColor(ContextCompat.getColor(this, R.color.status_violet_bg))
+                        binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.status_violet_text))
                         binding.tvAlertLevelBadge.text = "🔊 Level 3: Regional Voice Announcement (1.0 km)"
-                        binding.tvAlertLevelBadge.setTextColor(Color.parseColor("#3730A3"))
-                        binding.tvAlertLevelBadge.setBackgroundColor(Color.parseColor("#EEF2FF"))
+                        binding.tvAlertLevelBadge.setTextColor(ContextCompat.getColor(this, R.color.status_violet_text))
+                        binding.tvAlertLevelBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.status_violet_bg))
                     }
                     AlertLevel.LEVEL_2_VIBRATE -> {
                         binding.cardTrackingStatus.setCardBackgroundColor(ContextCompat.getColor(this, R.color.status_amber_bg))
@@ -744,7 +744,7 @@ class MainActivity : AppCompatActivity() {
                         binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
                         binding.tvAlertLevelBadge.text = "📡 Monitoring Distance En Route"
                         binding.tvAlertLevelBadge.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
-                        binding.tvAlertLevelBadge.setBackgroundColor(Color.parseColor("#1F94A3B8"))
+                        binding.tvAlertLevelBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.surface_elevated))
                     }
                 }
             }

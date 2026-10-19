@@ -51,7 +51,7 @@
             app:cardElevation="6dp"
             app:strokeColor="@color/card_stroke"
             app:strokeWidth="1dp"
-            app:cardBackgroundColor="@color/white">
+            app:cardBackgroundColor="@color/surface_card">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -67,7 +67,7 @@
                     android:src="@drawable/ic_arrow_back"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:padding="12dp"
-                    app:tint="@color/primary"
+                    app:tint="@color/text_accent"
                     android:contentDescription="@string/map_back" />
 
                 <EditText
@@ -105,7 +105,7 @@
             android:visibility="gone"
             app:cardCornerRadius="14dp"
             app:cardElevation="8dp"
-            app:cardBackgroundColor="@color/white">
+            app:cardBackgroundColor="@color/surface_card">
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rvSearchSuggestions"
@@ -120,16 +120,46 @@
     </LinearLayout>
 
     <!-- 4. Floating "My Location" GPS FAB -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_vertical|end"
+        android:layout_marginEnd="16dp"
+        android:orientation="vertical">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnZoomIn"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="0dp"
+            android:text="+"
+            android:textSize="24sp"
+            android:textColor="@color/text_primary"
+            android:backgroundTint="@color/surface_card"
+            android:contentDescription="@string/map_zoom_in" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnZoomOut"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="0dp"
+            android:text="−"
+            android:textSize="24sp"
+            android:textColor="@color/text_primary"
+            android:backgroundTint="@color/surface_card"
+            android:contentDescription="@string/map_zoom_out" />
+    </LinearLayout>
+
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabMyLocation"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
         android:layout_marginEnd="20dp"
-        android:layout_marginBottom="190dp"
+        android:layout_marginBottom="250dp"
         android:src="@drawable/ic_location"
-        app:tint="@color/primary"
-        app:backgroundTint="@color/white"
+        app:tint="@color/text_accent"
+        app:backgroundTint="@color/surface_card"
         app:elevation="6dp"
         android:contentDescription="Center on current GPS location" />
 
@@ -141,7 +171,7 @@
         android:layout_margin="16dp"
         app:cardCornerRadius="20dp"
         app:cardElevation="10dp"
-        app:cardBackgroundColor="@color/white"
+        app:cardBackgroundColor="@color/surface_card"
         app:strokeColor="@color/card_stroke"
         app:strokeWidth="1dp">
 
@@ -161,7 +191,7 @@
                     android:layout_width="22dp"
                     android:layout_height="22dp"
                     android:src="@drawable/ic_location"
-                    app:tint="@color/primary"
+                    app:tint="@color/text_accent"
                     android:layout_marginEnd="8dp"
                     android:contentDescription="Pin icon" />
 
@@ -189,6 +219,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:text="Pan map to drop pin..."
+                android:maxLines="2"
+                android:ellipsize="end"
                 android:textSize="17sp"
                 android:textStyle="bold"
                 android:textColor="@color/text_primary" />
@@ -213,6 +245,19 @@
                 android:textColor="@color/white"
                 app:cornerRadius="14dp"
                 android:backgroundTint="@color/primary" />
+
+            <TextView
+                android:id="@+id/tvMapAttribution"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:gravity="center"
+                android:text="@string/map_attribution"
+                android:textSize="12sp"
+                android:textColor="@color/text_accent"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true" />
 
         </LinearLayout>
 

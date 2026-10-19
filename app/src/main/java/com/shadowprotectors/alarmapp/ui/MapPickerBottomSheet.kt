@@ -38,14 +38,26 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
     private lateinit var geocodingHelper: GeocodingHelper
     private lateinit var searchAdapter: SearchResultAdapter
 
-    private var currentCenterLat = 9.9196
-    private var currentCenterLng = 78.1100
-    private var currentPlaceName = "Madurai Junction"
+    private var currentCenterLat = 20.5937
+    private var currentCenterLng = 78.9629
+    private var currentPlaceName = "Choose a destination"
+
+    private var locationCancellation: com.google.android.gms.tasks.CancellationTokenSource? = null
+    private val locationSettings = com.shadowprotectors.alarmapp.util.LocationSettingsGate(
+        this, { requireContext() }, lifecycle
+    ) { if (_binding != null) fetchInitialLocation() }
+
+    private fun requestCurrentLocation() {
+        val granted = listOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION)
+            .any { androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), it) == android.content.pm.PackageManager.PERMISSION_GRANTED }
+        if (granted) locationSettings.ensureEnabled()
+        else locationPermissionLauncher.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
+    }
 
     private val locationPermissionLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
-        if (grants.values.any { it }) fetchInitialLocation()
+        if (grants.values.any { it }) locationSettings.ensureEnabled()
         else context?.let { android.widget.Toast.makeText(it, "Location permission denied. Search or move the map to choose your stop.", android.widget.Toast.LENGTH_LONG).show() }
     }
 
@@ -102,12 +114,12 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
 
         if (hasCustomInit) {
             binding.mapView.controller.setCenter(GeoPoint(initLat, initLng))
-            binding.mapView.controller.setZoom(16.0)
+            binding.mapView.controller.setZoom(18.0)
             binding.tvSelectedCoords.text = String.format(Locale.US, "Lat: %.5f, Lng: %.5f", initLat, initLng)
             onMapMoved()
         } else {
             onMapMoved()
-            fetchInitialLocation()
+            requestCurrentLocation()
         }
     }
 
@@ -115,7 +127,12 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
         binding.mapView.apply {
             setTileSource(TileSourceFactory.MAPNIK)
             setMultiTouchControls(true)
-            controller.setZoom(15.0)
+            setTilesScaledToDpi(true)
+            minZoomLevel = 3.0
+            maxZoomLevel = 19.0
+            zoomController.setVisibility(org.osmdroid.views.CustomZoomButtonsController.Visibility.NEVER)
+            // A regional overview until a real location or search result is available.
+            controller.setZoom(5.0)
             controller.setCenter(GeoPoint(currentCenterLat, currentCenterLng))
 
             addMapListener(object : MapListener {
@@ -156,6 +173,8 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
 
     private fun setupSearch() {
         searchAdapter = SearchResultAdapter { result ->
+            locationCancellation?.cancel()
+            binding.fabMyLocation.isEnabled = true
             binding.cardSuggestions.isVisible = false
             binding.etSearchQuery.setText("")
             binding.btnClearSearch.isVisible = false
@@ -168,7 +187,7 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
             binding.tvSelectedCoords.text = String.format(Locale.US, "Lat: %.5f, Lng: %.5f", result.latitude, result.longitude)
 
             binding.mapView.controller.animateTo(GeoPoint(result.latitude, result.longitude))
-            binding.mapView.controller.setZoom(16.5)
+            binding.mapView.controller.setZoom(18.0)
         }
 
         binding.rvSearchSuggestions.apply {
@@ -209,14 +228,11 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
 
     private fun setupListeners() {
         binding.btnBackMap.setOnClickListener { dismiss() }
-        binding.fabMyLocation.setOnClickListener {
-            val fine = androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), android.Manifest.permission.ACCESS_FINE_LOCATION)
-            val coarse = androidx.core.content.ContextCompat.checkSelfPermission(requireContext(), android.Manifest.permission.ACCESS_COARSE_LOCATION)
-            if (fine == android.content.pm.PackageManager.PERMISSION_GRANTED || coarse == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                fetchInitialLocation()
-            } else {
-                locationPermissionLauncher.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
-            }
+        binding.fabMyLocation.setOnClickListener { requestCurrentLocation() }
+        binding.btnZoomIn.setOnClickListener { binding.mapView.controller.zoomIn() }
+        binding.btnZoomOut.setOnClickListener { binding.mapView.controller.zoomOut() }
+        binding.tvMapAttribution.setOnClickListener {
+            startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.openstreetmap.org/copyright")))
         }
 
         binding.btnConfirmDestination.setOnClickListener {
@@ -232,14 +248,14 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
         val context = requireContext()
         val textInputLayout = com.google.android.material.textfield.TextInputLayout(context).apply {
             hint = "e.g. Home, Office"
-            setHintTextColor(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#475569")))
-            setBoxStrokeColorStateList(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#2563EB")))
-            boxBackgroundColor = android.graphics.Color.parseColor("#F8FAFC")
+            setHintTextColor(android.content.res.ColorStateList.valueOf(androidx.core.content.ContextCompat.getColor(context, com.shadowprotectors.alarmapp.R.color.text_secondary)))
+            setBoxStrokeColorStateList(android.content.res.ColorStateList.valueOf(androidx.core.content.ContextCompat.getColor(context, com.shadowprotectors.alarmapp.R.color.text_accent)))
+            boxBackgroundColor = androidx.core.content.ContextCompat.getColor(context, com.shadowprotectors.alarmapp.R.color.surface_elevated)
         }
         val input = com.google.android.material.textfield.TextInputEditText(textInputLayout.context).apply {
             setText(selectedName)
-            setTextColor(android.graphics.Color.parseColor("#0F172A"))
-            setHintTextColor(android.graphics.Color.parseColor("#94A3B8"))
+            setTextColor(androidx.core.content.ContextCompat.getColor(context, com.shadowprotectors.alarmapp.R.color.text_primary))
+            setHintTextColor(androidx.core.content.ContextCompat.getColor(context, com.shadowprotectors.alarmapp.R.color.text_muted))
             setSelection(text?.length ?: 0)
             setSingleLine(true)
         }
@@ -247,8 +263,8 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
 
         val cbSave = com.google.android.material.checkbox.MaterialCheckBox(context).apply {
             text = "Save to My Locations"
-            setTextColor(android.graphics.Color.parseColor("#0F172A"))
-            buttonTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#2563EB"))
+            setTextColor(androidx.core.content.ContextCompat.getColor(context, com.shadowprotectors.alarmapp.R.color.text_primary))
+            buttonTintList = android.content.res.ColorStateList.valueOf(androidx.core.content.ContextCompat.getColor(context, com.shadowprotectors.alarmapp.R.color.text_accent))
             isChecked = true
             val dp8 = (8 * context.resources.displayMetrics.density).toInt()
             setPadding(dp8, dp8, dp8, dp8)
@@ -347,20 +363,37 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
     }
 
     private fun fetchInitialLocation() {
+        locationCancellation?.cancel()
+        val cancellation = com.google.android.gms.tasks.CancellationTokenSource()
+        locationCancellation = cancellation
+        binding.fabMyLocation.isEnabled = false
+        val request = com.google.android.gms.location.CurrentLocationRequest.Builder()
+            .setPriority(com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY)
+            .setMaxUpdateAgeMillis(10_000L)
+            .setDurationMillis(20_000L)
+            .build()
         try {
-            val fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity())
-            fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-                val viewBinding = _binding ?: return@addOnSuccessListener
-                if (location != null) {
-                    currentCenterLat = location.latitude
-                    currentCenterLng = location.longitude
-                    viewBinding.mapView.controller.setCenter(GeoPoint(location.latitude, location.longitude))
-                    binding.mapView.controller.setZoom(16.0)
+            LocationServices.getFusedLocationProviderClient(requireActivity())
+                .getCurrentLocation(request, cancellation.token)
+                .addOnSuccessListener { location ->
+                    val viewBinding = _binding ?: return@addOnSuccessListener
+                    if (cancellation.token.isCancellationRequested) return@addOnSuccessListener
+                    if (location != null) {
+                        viewBinding.mapView.controller.setCenter(GeoPoint(location.latitude, location.longitude))
+                        viewBinding.mapView.controller.setZoom(18.0)
+                        onMapMoved()
+                    } else showLocationUnavailable()
                 }
-            }
+                .addOnFailureListener { if (_binding != null) showLocationUnavailable() }
+                .addOnCompleteListener { if (!cancellation.token.isCancellationRequested) _binding?.fabMyLocation?.isEnabled = true }
         } catch (e: SecurityException) {
-            // Use default coordinates if permission not granted yet
+            binding.fabMyLocation.isEnabled = true
+            showLocationUnavailable()
         }
+    }
+
+    private fun showLocationUnavailable() {
+        context?.let { android.widget.Toast.makeText(it, "Could not get a current location. Retry outdoors, search, or move the map to choose your stop.", android.widget.Toast.LENGTH_LONG).show() }
     }
 
     override fun onResume() {
@@ -380,6 +413,7 @@ class MapPickerBottomSheet : BottomSheetDialogFragment() {
     }
 
     override fun onDestroyView() {
+        locationCancellation?.cancel()
         activeDialog?.dismiss()
         activeDialog = null
         searchJob?.cancel()

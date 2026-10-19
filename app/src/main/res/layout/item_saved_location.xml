@@ -26,7 +26,7 @@
             android:layout_width="28dp"
             android:layout_height="28dp"
             android:src="@drawable/ic_location"
-            app:tint="@color/primary"
+            app:tint="@color/text_accent"
             android:layout_marginEnd="12dp"
             android:contentDescription="Saved Location Pin" />
 
@@ -64,8 +64,8 @@
             android:text="1x"
             android:textSize="10sp"
             android:textStyle="bold"
-            android:textColor="@color/primary_light"
-            android:background="#EFF6FF"
+            android:textColor="@color/text_accent"
+            android:background="@color/surface_elevated"
             android:paddingHorizontal="8dp"
             android:paddingVertical="3dp"
             android:layout_marginEnd="8dp" />

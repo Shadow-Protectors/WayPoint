@@ -41,5 +41,6 @@
 
     <color name="white">#FFFFFF</color>
     <color name="black">#000000</color>
+    <color name="on_accent">#FFFFFF</color>
 </resources>
 

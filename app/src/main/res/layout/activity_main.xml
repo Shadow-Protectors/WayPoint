@@ -13,6 +13,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@color/primary"
+        app:liftOnScrollColor="@color/primary"
         app:elevation="4dp">
 
         <LinearLayout
@@ -192,7 +193,7 @@
                                 android:text="-- km"
                                 android:textSize="34sp"
                                 android:textStyle="bold"
-                                android:textColor="@color/primary_light"
+                                android:textColor="@color/text_accent"
                                 android:fontFamily="monospace"
                                 android:includeFontPadding="false" />
 
@@ -391,8 +392,8 @@
                         android:hint="Selected Destination Name"
                         app:helperText="Edit this for custom voice announcements (e.g. 'Home')"
                         app:helperTextTextColor="@color/text_secondary"
-                        app:boxStrokeColor="@color/primary_light"
-                        app:hintTextColor="@color/primary_light"
+                        app:boxStrokeColor="@color/text_accent"
+                        app:hintTextColor="@color/text_accent"
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                         <com.google.android.material.textfield.TextInputEditText
@@ -410,8 +411,8 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:hint="Latitude"
-                        app:boxStrokeColor="@color/primary_light"
-                        app:hintTextColor="@color/primary_light"
+                        app:boxStrokeColor="@color/text_accent"
+                        app:hintTextColor="@color/text_accent"
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                         <com.google.android.material.textfield.TextInputEditText
@@ -430,8 +431,8 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:hint="Longitude"
-                        app:boxStrokeColor="@color/primary_light"
-                        app:hintTextColor="@color/primary_light"
+                        app:boxStrokeColor="@color/text_accent"
+                        app:hintTextColor="@color/text_accent"
                         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                         <com.google.android.material.textfield.TextInputEditText
@@ -488,9 +489,9 @@
                             android:layout_height="32dp"
                             android:text="Manage"
                             android:textSize="11sp"
-                            android:textColor="@color/primary"
+                            android:textColor="@color/text_accent"
                             app:icon="@drawable/ic_location"
-                            app:iconTint="@color/primary"
+                            app:iconTint="@color/text_accent"
                             app:iconSize="14dp"
                             app:iconPadding="2dp"
                             android:paddingHorizontal="8dp"

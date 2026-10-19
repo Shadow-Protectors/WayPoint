@@ -153,7 +153,7 @@ class GeocodingHelper(private val context: Context) {
                             override fun onGeocode(addresses: MutableList<Address>) {
                                 if (addresses.isNotEmpty()) {
                                     val addr = addresses[0]
-                                    val name = addr.featureName ?: addr.subLocality ?: addr.locality ?: addr.getAddressLine(0) ?: "Selected Point"
+                                    val name = formatSelectedAddress(addr)
                                     continuation.resume(name)
                                 } else {
                                     continuation.resume(String.format(Locale.US, "Point (%.4f, %.4f)", latitude, longitude))
@@ -170,7 +170,7 @@ class GeocodingHelper(private val context: Context) {
                     val addresses = geocoder.getFromLocation(latitude, longitude, 1)
                     if (!addresses.isNullOrEmpty()) {
                         val addr = addresses[0]
-                        addr.featureName ?: addr.subLocality ?: addr.locality ?: addr.getAddressLine(0) ?: "Selected Point"
+                        formatSelectedAddress(addr)
                     } else {
                         String.format(Locale.US, "Point (%.4f, %.4f)", latitude, longitude)
                     }
@@ -217,6 +217,14 @@ class GeocodingHelper(private val context: Context) {
                 "GPS Coordinates: ${String.format(Locale.US, "%.4f, %.4f", latitude, longitude)}"
             }
         }
+    }
+
+    internal fun formatSelectedAddress(addr: Address): String {
+        val parts = listOfNotNull(
+            addr.featureName?.takeUnless { it.matches(Regex("[0-9-]+")) || it.contains("+") },
+            addr.thoroughfare, addr.subLocality, addr.locality
+        ).filter { it.isNotBlank() }.distinct().take(3)
+        return parts.joinToString(", ").ifBlank { addr.getAddressLine(0) ?: "Selected Point" }
     }
 
     private fun formatLandmarkText(addr: Address): String {

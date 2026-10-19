@@ -110,14 +110,14 @@ class ManageSavedLocationsActivity : AppCompatActivity() {
     private fun showRenameDialog(location: SavedLocation) {
         val textInputLayout = TextInputLayout(this).apply {
             hint = "Custom Location Name"
-            setHintTextColor(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#475569")))
-            setBoxStrokeColorStateList(android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#2563EB")))
-            boxBackgroundColor = android.graphics.Color.parseColor("#F8FAFC")
+            setHintTextColor(android.content.res.ColorStateList.valueOf(androidx.core.content.ContextCompat.getColor(context, com.shadowprotectors.alarmapp.R.color.text_secondary)))
+            setBoxStrokeColorStateList(android.content.res.ColorStateList.valueOf(androidx.core.content.ContextCompat.getColor(context, com.shadowprotectors.alarmapp.R.color.text_accent)))
+            boxBackgroundColor = androidx.core.content.ContextCompat.getColor(context, com.shadowprotectors.alarmapp.R.color.surface_elevated)
         }
         val input = TextInputEditText(textInputLayout.context).apply {
             setText(location.customName)
-            setTextColor(android.graphics.Color.parseColor("#0F172A"))
-            setHintTextColor(android.graphics.Color.parseColor("#94A3B8"))
+            setTextColor(androidx.core.content.ContextCompat.getColor(context, com.shadowprotectors.alarmapp.R.color.text_primary))
+            setHintTextColor(androidx.core.content.ContextCompat.getColor(context, com.shadowprotectors.alarmapp.R.color.text_muted))
             setSelection(text?.length ?: 0)
             setSingleLine(true)
         }
