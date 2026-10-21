@@ -102,6 +102,7 @@ class AlertManager(
         }
 
         val targetLevel = when {
+            distanceKm <= 0.5 -> AlertLevel.LEVEL_4_FULL_ALARM
             metricValue <= profile.level4Value -> AlertLevel.LEVEL_4_FULL_ALARM
             metricValue <= profile.level3Value -> AlertLevel.LEVEL_3_VOICE
             metricValue <= profile.level2Value -> AlertLevel.LEVEL_2_VIBRATE

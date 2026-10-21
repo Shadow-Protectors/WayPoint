@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 data class TrackingState(
     val isTracking: Boolean = false,
+    val alertsSilenced: Boolean = false,
     val destinationName: String = "",
     val destLat: Double = 0.0,
     val destLng: Double = 0.0,

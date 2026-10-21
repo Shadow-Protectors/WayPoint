@@ -62,27 +62,13 @@ object DistanceEngine {
         return ((bearingDeg + 360.0) % 360.0).toFloat()
     }
 
-    /**
-     * Estimates remaining time in minutes given current distance (km) and speed (km/h).
-     * Includes fallback minimum speeds based on trip mode to prevent absurdly large ETAs 
-     * when stationary or in heavy traffic.
-     */
-    fun estimateEtaMinutes(distanceKm: Double, speedKmh: Double, tripMode: com.shadowprotectors.alarmapp.engine.TripMode): Int? {
-        if (distanceKm <= 0.0) return 0
-
-        val minRealisticSpeed = when (tripMode) {
-            com.shadowprotectors.alarmapp.engine.TripMode.TRAIN -> 40.0
-            com.shadowprotectors.alarmapp.engine.TripMode.BUS_CAR -> 25.0
-            else -> 10.0
-        }
-
-        // Use the actual speed if it's realistic, otherwise fallback to the minimum realistic speed for that mode.
-        // This prevents 4-hour ETAs for a 20km trip when the user is just sitting at home testing or stuck at a red light.
-        val effectiveSpeed = if (speedKmh < minRealisticSpeed) minRealisticSpeed else speedKmh
-
-        val hours = distanceKm / effectiveSpeed
-        val minutes = (hours * 60.0).toInt()
-        return minutes.coerceAtLeast(1)
+    /** Motion-based estimate; no assumed vehicle speed when motion is unavailable. */
+    @Suppress("UNUSED_PARAMETER")
+    fun estimateEtaMinutes(distanceKm: Double, speedKmh: Double, tripMode: TripMode): Int? {
+        if (!distanceKm.isFinite() || distanceKm < 0.0) return null
+        if (distanceKm == 0.0) return 0
+        if (!speedKmh.isFinite() || speedKmh < 2.0) return null
+        return kotlin.math.ceil(distanceKm / speedKmh * 60.0).toInt().coerceAtLeast(1)
     }
 
     /**

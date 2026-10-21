@@ -69,6 +69,7 @@ object AudioAlarmHelper {
     @Synchronized
     fun playLevel1Alert(context: Context) {
         val appContext = context.applicationContext
+        stopAlertPing()
         try {
             val vibrator = getVibrator(appContext)
             val pattern = longArrayOf(0, 250, 150, 250)
@@ -84,10 +85,11 @@ object AudioAlarmHelper {
 
         try {
             val toneGen = android.media.ToneGenerator(AudioManager.STREAM_NOTIFICATION, 85)
+            currentToneGen = toneGen
             toneGen.startTone(android.media.ToneGenerator.TONE_PROP_BEEP2, 300)
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                try { toneGen.release() } catch (_: Exception) {}
-            }, 600)
+            alertPingHandler = android.os.Handler(android.os.Looper.getMainLooper()).also {
+                it.postDelayed({ stopAlertPing() }, 600)
+            }
         } catch (e: Exception) {
             Log.e("AudioAlarmHelper", "Error playing Level 1 chime: ${e.message}")
         }
@@ -172,6 +174,7 @@ object AudioAlarmHelper {
     fun startFullAlarm(context: Context) {
         if (isAlarmPlaying) return
         isAlarmPlaying = true
+        stopAlertPing()
 
         val appContext = context.applicationContext
 

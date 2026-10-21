@@ -632,6 +632,16 @@
                 android:backgroundTint="@color/primary_light" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSilenceAlerts"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="56dp"
+                android:layout_marginTop="10dp"
+                android:text="I&apos;m awake - stop alerts"
+                android:visibility="gone"
+                app:cornerRadius="14dp" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnStopTracking"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"

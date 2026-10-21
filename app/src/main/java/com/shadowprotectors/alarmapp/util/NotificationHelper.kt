@@ -68,7 +68,9 @@ object NotificationHelper {
         destinationName: String,
         distanceKm: Double,
         etaMinutes: Int?,
-        stopIntent: PendingIntent
+        stopIntent: PendingIntent,
+        silenceIntent: PendingIntent? = null,
+        alertsSilenced: Boolean = false
     ): Notification {
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -81,15 +83,20 @@ object NotificationHelper {
         )
 
         val etaText = if (etaMinutes != null) " • ETA: ~${etaMinutes}m" else ""
-        val contentText = String.format("Distance: %.2f km%s", distanceKm, etaText)
+        val contentText = if (distanceKm == Double.MAX_VALUE) "Acquiring GPS fix" else String.format("Distance: %.2f km%s", distanceKm, etaText)
 
         return NotificationCompat.Builder(context, CHANNEL_TRACKING_ID)
             .setContentTitle("Tracking to $destinationName")
-            .setContentText(contentText)
+            .setContentText(if (alertsSilenced) "$contentText - Alerts off for this trip" else contentText)
             .setSmallIcon(R.drawable.ic_alarm)
             .setContentIntent(contentPendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .apply {
+                if (!alertsSilenced && silenceIntent != null) {
+                    addAction(R.drawable.ic_alarm, "I'm awake - stop alerts", silenceIntent)
+                }
+            }
             .addAction(R.drawable.ic_alarm, "Stop Tracking", stopIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)

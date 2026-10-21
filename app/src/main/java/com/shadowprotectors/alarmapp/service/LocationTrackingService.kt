@@ -118,7 +118,9 @@ class LocationTrackingService : Service() {
     private var lastNotifiedDistanceKm = Double.MAX_VALUE
     private var lastEmittedState: TrackingState? = null
     private var hasLaunchedLevel4Activity = false
-    private var smoothedSpeedKmh = 0.0
+    private val speedEstimator = com.shadowprotectors.alarmapp.engine.MotionSpeedEstimator()
+    private var silencePendingIntent: PendingIntent? = null
+    private var lastNotifiedEta: Int? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -174,6 +176,13 @@ class LocationTrackingService : Service() {
                 AudioAlarmHelper.stopFullAlarm(this)
                 val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 notificationManager.cancel(NotificationHelper.NOTIFICATION_ALARM_ID)
+                lastEmittedState?.copy(alertsSilenced = true)?.let {
+                    lastEmittedState = it
+                    ServiceEventBus.updateState(it)
+                    notificationManager.notify(NotificationHelper.NOTIFICATION_TRACKING_ID,
+                        NotificationHelper.buildTrackingNotification(this, destinationName, it.distanceKm,
+                            it.etaMinutes, stopPendingIntent!!, silencePendingIntent, true))
+                }
             }
             ACTION_STOP -> {
                 stopForegroundTracking()
@@ -189,8 +198,11 @@ class LocationTrackingService : Service() {
         // Assign to class-level property so handleLocationUpdate() can reuse it without per-tick allocation
         stopPendingIntent = PendingIntent.getService(this, 2, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
+        silencePendingIntent = PendingIntent.getService(this, 3,
+            Intent(this, LocationTrackingService::class.java).apply { action = ACTION_STOP_ALARM },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val initialNotification = NotificationHelper.buildTrackingNotification(
-            this, destinationName, 0.0, null, stopPendingIntent!!
+            this, destinationName, 0.0, null, stopPendingIntent!!, silencePendingIntent
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -207,9 +219,13 @@ class LocationTrackingService : Service() {
         alertManager.reset()
         directionFilter.reset()
         lastNotifiedDistanceKm = Double.MAX_VALUE
-        lastEmittedState = null
+        lastEmittedState = TrackingState(isTracking = true, destinationName = destinationName,
+            destLat = destLat, destLng = destLng, distanceKm = Double.MAX_VALUE, tripMode = activeProfile.mode)
+        ServiceEventBus.updateState(lastEmittedState!!)
         hasLaunchedLevel4Activity = false
-        smoothedSpeedKmh = 0.0
+        speedEstimator.reset()
+        lastLocation = null
+        lastNotifiedEta = null
 
         val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, activeProfile.pollingIntervalMs)
             .setMinUpdateIntervalMillis(activeProfile.minUpdateIntervalMs)
@@ -239,35 +255,25 @@ class LocationTrackingService : Service() {
         // Only trust bearing if the user is moving at a measurable speed (> 0.5 m/s or 1.8 km/h)
         val userBearing = if (location.hasBearing() && location.hasSpeed() && location.speed > 0.5f) location.bearing else -1f
 
-        // Calculate accurate real-time speed in km/h (* 3.6 from m/s)
-        val rawSpeedKmh = if (location.hasSpeed() && location.speed > 0f) location.speed * 3.6 else 0.0
-        val prevLoc = lastLocation
-        val calcDeltaSpeedKmh = if (prevLoc != null) {
-            val distMeters = location.distanceTo(prevLoc)
-            val timeDiffSec = (location.time - prevLoc.time) / 1000.0
-            if (timeDiffSec in 1.5..60.0 && location.hasAccuracy() && location.accuracy < 50f && prevLoc.hasAccuracy() && prevLoc.accuracy < 50f) {
-                (distMeters / timeDiffSec) * 3.6
-            } else 0.0
-        } else 0.0
-
-        val instantSpeedKmh = if (rawSpeedKmh in 0.1..180.0) {
-            rawSpeedKmh
-        } else if (calcDeltaSpeedKmh in 0.1..180.0) {
-            calcDeltaSpeedKmh
-        } else {
-            0.0
+        val previous = lastLocation
+        val timestampMs = location.elapsedRealtimeNanos / 1_000_000L
+        if (previous != null && location.elapsedRealtimeNanos <= previous.elapsedRealtimeNanos) return
+        val deltaSeconds = previous?.let { (location.elapsedRealtimeNanos - it.elapsedRealtimeNanos) / 1e9 }
+        val maxSpeed = if (activeProfile.mode == com.shadowprotectors.alarmapp.engine.TripMode.TRAIN) 400.0 else 180.0
+        val measuredSpeed = when {
+            location.hasSpeed() && location.speed >= 0f && location.speed * 3.6 <= maxSpeed -> location.speed * 3.6
+            previous != null && deltaSeconds != null && deltaSeconds in 1.0..60.0 &&
+                location.hasAccuracy() && location.accuracy < 50f && previous.hasAccuracy() && previous.accuracy < 50f -> {
+                val meters = location.distanceTo(previous).toDouble()
+                // Ignore displacement within the combined GPS uncertainty.
+                val speed = if (meters <= location.accuracy + previous.accuracy) 0.0 else meters / deltaSeconds * 3.6
+                speed.takeIf { it <= maxSpeed }
+            }
+            else -> null
         }
-
-        // Exponential moving average for smooth ETA without jitter (alpha = 0.35)
-        smoothedSpeedKmh = if (smoothedSpeedKmh <= 0.0) {
-            instantSpeedKmh
-        } else {
-            (0.35 * instantSpeedKmh) + (0.65 * smoothedSpeedKmh)
-        }
-
+        val finalSpeedKmh = speedEstimator.update(timestampMs, measuredSpeed) ?: 0.0
         lastLocation = location
 
-        val finalSpeedKmh = smoothedSpeedKmh
         val etaMinutes = DistanceEngine.estimateEtaMinutes(distanceKm, finalSpeedKmh, activeProfile.mode)
 
         val approachState = directionFilter.evaluateApproach(distanceKm, userBearing, targetBearing, activeProfile.bearingToleranceDeg, location.time)
@@ -275,12 +281,13 @@ class LocationTrackingService : Service() {
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // 1. Update Foreground Persistent Notification: only when distance changed by > 100 m
+        // 1. Refresh when distance or the motion-based ETA changes.
         val pendingIntent = stopPendingIntent!!
-        if (Math.abs(distanceKm - lastNotifiedDistanceKm) > 0.1 || lastNotifiedDistanceKm == Double.MAX_VALUE) {
+        if (Math.abs(distanceKm - lastNotifiedDistanceKm) > 0.1 || lastNotifiedDistanceKm == Double.MAX_VALUE || etaMinutes != lastNotifiedEta) {
             lastNotifiedDistanceKm = distanceKm
+            lastNotifiedEta = etaMinutes
             val notification = NotificationHelper.buildTrackingNotification(
-                this, destinationName, distanceKm, etaMinutes, pendingIntent
+                this, destinationName, distanceKm, etaMinutes, pendingIntent, silencePendingIntent, alertManager.isAlarmDismissedByUser
             )
             notificationManager.notify(NotificationHelper.NOTIFICATION_TRACKING_ID, notification)
         }
@@ -312,6 +319,7 @@ class LocationTrackingService : Service() {
         //    Avoids redundant StateFlow emissions and UI redraws when screen is off.
         val newState = TrackingState(
             isTracking = true,
+            alertsSilenced = alertManager.isAlarmDismissedByUser,
             destinationName = destinationName,
             destLat = destLat,
             destLng = destLng,

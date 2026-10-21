@@ -46,6 +46,52 @@ class WorkflowRegressionTest {
         voice.shutdown()
     }
 
+    @Test fun awakeAtEitherEarlyLevelSuppressesAllLaterAlertsUntilNewTrip() {
+        val context = RuntimeEnvironment.getApplication()
+        for (distance in listOf(5.0, 2.0)) {
+            val voice = VoiceAlertHelper(context)
+            val fired = mutableListOf<AlertLevel>()
+            val alerts = AlertManager(context, voice, object : AlertCallback {
+                override fun onAlertTriggered(level: AlertLevel, distanceKm: Double, destinationName: String) {
+                    fired.add(level)
+                }
+            })
+            val profile = AlertProfileResolver.resolve(TripMode.BUS_CAR)
+            fun update(km: Double, direction: ApproachState = ApproachState.APPROACHING) =
+                alerts.processState(km, null, 40.0, direction, "Home", profile)
+            update(distance)
+            alerts.stopAlarm()
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(30))
+            update(3.0, ApproachState.RECEDING)
+            update(1.0)
+            update(0.4)
+            assertEquals(1, fired.size)
+            assertFalse(AudioAlarmHelper.isPlaying())
+            assertTrue(alerts.isAlarmDismissedByUser)
+            alerts.reset()
+            update(5.0)
+            assertEquals(2, fired.size)
+            assertFalse(alerts.isAlarmDismissedByUser)
+            alerts.stopAlarm()
+            voice.shutdown()
+        }
+    }
+
+    @Test fun trackingNotificationOffersAwakeActionUntilAcknowledged() {
+        val context = RuntimeEnvironment.getApplication()
+        val intent = android.app.PendingIntent.getService(context, 99,
+            android.content.Intent(context, com.shadowprotectors.alarmapp.service.LocationTrackingService::class.java)
+                .setAction(com.shadowprotectors.alarmapp.service.LocationTrackingService.ACTION_STOP_ALARM),
+            android.app.PendingIntent.FLAG_IMMUTABLE)
+        val active = com.shadowprotectors.alarmapp.util.NotificationHelper.buildTrackingNotification(
+            context, "Home", 5.0, 10, intent, intent, false)
+        assertTrue(active.actions.any { it.title.toString().contains("awake") })
+        val silenced = com.shadowprotectors.alarmapp.util.NotificationHelper.buildTrackingNotification(
+            context, "Home", 5.0, 10, intent, intent, true)
+        assertFalse(silenced.actions.any { it.title.toString().contains("awake") })
+        assertTrue(silenced.extras.getCharSequence(android.app.Notification.EXTRA_TEXT).toString().contains("Alerts off"))
+    }
+
     @Test fun stoppingVoiceCancelsDelayedSpeech() {
         val voice = VoiceAlertHelper(RuntimeEnvironment.getApplication())
         voice.onInit(TextToSpeech.SUCCESS)

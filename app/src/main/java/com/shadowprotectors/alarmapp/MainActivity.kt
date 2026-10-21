@@ -358,6 +358,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         // 4. Explicit Stop Tracking Button
+        binding.btnSilenceAlerts.setOnClickListener {
+            LocationTrackingService.stopAlarm(this)
+        }
         binding.btnStopTracking.setOnClickListener {
             stopTrackingService()
         }
@@ -588,7 +591,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (trackingState.isTracking) {
-            return if (trackingState.alertLevel == AlertLevel.LEVEL_4_FULL_ALARM) {
+            return if (trackingState.alertLevel == AlertLevel.LEVEL_4_FULL_ALARM && !trackingState.alertsSilenced) {
                 com.shadowprotectors.alarmapp.engine.BusUiState.LimitReached(trackingState.destinationName)
             } else if (trackingState.distanceKm == Double.MAX_VALUE || trackingState.distanceKm <= 0.0) {
                 com.shadowprotectors.alarmapp.engine.BusUiState.Partial("Acquiring GPS location fix…")
@@ -619,6 +622,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderBusUiState(state: com.shadowprotectors.alarmapp.engine.BusUiState) {
+        val tracking = ServiceEventBus.trackingState.value
+        binding.btnSilenceAlerts.isVisible = tracking.isTracking
+        binding.btnSilenceAlerts.isEnabled = !tracking.alertsSilenced
+        binding.btnSilenceAlerts.text = if (tracking.alertsSilenced) "Alerts off for this trip" else "I'm awake - stop alerts"
         binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
         when (state) {
             is com.shadowprotectors.alarmapp.engine.BusUiState.Idle -> {
@@ -685,7 +692,7 @@ class MainActivity : AppCompatActivity() {
                 binding.tvDistance.text = String.format(Locale.US, "%.2f km", state.distanceKm)
 
                 val currentState = ServiceEventBus.trackingState.value
-                binding.tvEta.text = formatEta(currentState.etaMinutes, currentState.speedKmh)
+                binding.tvEta.text = formatEta(currentState.etaMinutes)
 
                 when (state.approachState) {
                     ApproachState.APPROACHING -> {
@@ -710,7 +717,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                when (state.alertLevel) {
+                when (if (currentState.alertsSilenced) AlertLevel.NONE else state.alertLevel) {
                     AlertLevel.LEVEL_4_FULL_ALARM -> {
                         binding.cardTrackingStatus.setCardBackgroundColor(ContextCompat.getColor(this, R.color.status_red_bg))
                         binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.status_red_text))
@@ -774,21 +781,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Returns a clean, human-readable ETA string for passengers.
-     * When stationary (< 2 km/h), calculates a baseline estimate based on average road speeds.
-     */
-    private fun formatEta(etaMinutes: Int?, speedKmh: Double): String {
-        val effectiveMinutes = etaMinutes ?: run {
-            val dist = ServiceEventBus.trackingState.value.distanceKm
-            if (dist > 0.0 && dist < Double.MAX_VALUE) {
-                com.shadowprotectors.alarmapp.engine.DistanceEngine.estimateInitialEtaMinutes(dist, 30.0)
-            } else null
-        }
-
-        if (effectiveMinutes == null) {
-            return ""
-        }
+    /** Formats measured motion without substituting a fixed road speed. */
+    private fun formatEta(etaMinutes: Int?): String {
+        val effectiveMinutes = etaMinutes ?: return "Waiting for movement"
         return when {
             effectiveMinutes < 1  -> "NOW!"
             effectiveMinutes < 60 -> "${effectiveMinutes} min"
