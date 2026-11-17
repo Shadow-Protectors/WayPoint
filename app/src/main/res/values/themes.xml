@@ -1,6 +1,6 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Semantic colors resolve for both system light and dark themes. -->
-    <style name="Theme.TravelAlarm" parent="Theme.Material3.DayNight.NoActionBar">
+    <!-- Keep the light palette regardless of the system appearance. -->
+    <style name="Theme.TravelAlarm" parent="Theme.Material3.Light.NoActionBar">
         <item name="colorPrimary">@color/text_accent</item>
         <item name="colorPrimaryVariant">@color/primary_dark</item>
         <item name="colorOnPrimary">@color/on_accent</item>
@@ -26,7 +26,7 @@
         <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
     </style>
 
-    <!-- Dialogs share the same day/night surface and text tokens. -->
+    <!-- Dialogs share the light surface and text tokens. -->
     <style name="CustomMaterialAlertDialog" parent="ThemeOverlay.Material3.MaterialAlertDialog">
         <item name="colorSurface">@color/surface_card</item>
         <item name="colorOnSurface">@color/text_primary</item>

@@ -42,7 +42,7 @@ class MobileRegressionTest {
     }
 
     @Test @Config(qualifiers = "night")
-    fun mapSearchAndConfirmationUseDarkSurfacesWithReadableText() {
+    fun mapSearchAndConfirmationStayLightWithReadableText() {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup()
         val activity = controller.get()
         val picker = com.shadowprotectors.alarmapp.ui.MapPickerBottomSheet.newInstance(9.92, 78.11)
@@ -52,7 +52,7 @@ class MobileRegressionTest {
         val search = root.findViewById<android.widget.EditText>(R.id.etSearchQuery)
         val searchCard = search.parent.parent as com.google.android.material.card.MaterialCardView
         assertTrue(ColorUtils.calculateContrast(search.currentTextColor, searchCard.cardBackgroundColor.defaultColor) >= 4.5)
-        assertTrue(ColorUtils.calculateLuminance(searchCard.cardBackgroundColor.defaultColor) < 0.1)
+        assertTrue(ColorUtils.calculateLuminance(searchCard.cardBackgroundColor.defaultColor) > 0.9)
         val map = root.findViewById<org.osmdroid.views.MapView>(R.id.mapView)
         assertEquals(18.0, map.zoomLevelDouble, 0.01)
         assertTrue(root.findViewById<android.widget.TextView>(R.id.tvMapAttribution).text.contains("OpenStreetMap"))
@@ -62,7 +62,7 @@ class MobileRegressionTest {
     }
 
     @Test @Config(qualifiers = "night")
-    fun darkSurfacesAndStatusTextRemainReadable() {
+    fun lightSurfacesAndStatusTextRemainReadableAtNight() {
         val context = RuntimeEnvironment.getApplication()
         fun color(id: Int) = ContextCompat.getColor(context, id)
         val surfaces = listOf(R.color.surface_card, R.color.background_light, R.color.surface_elevated)
@@ -71,7 +71,7 @@ class MobileRegressionTest {
                 assertTrue("Text $text on $surface", ColorUtils.calculateContrast(color(text), color(surface)) >= 4.5)
             }
         }
-        assertTrue(ColorUtils.calculateLuminance(color(R.color.surface_card)) < 0.1)
+        assertTrue(ColorUtils.calculateLuminance(color(R.color.surface_card)) > 0.9)
         for ((foreground, background) in listOf(
             R.color.status_green_text to R.color.status_green_bg,
             R.color.status_amber_text to R.color.status_amber_bg,
