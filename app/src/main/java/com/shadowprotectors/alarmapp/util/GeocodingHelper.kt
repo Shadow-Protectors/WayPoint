@@ -13,7 +13,8 @@ import java.net.URL
 import java.net.URLEncoder
 import java.util.Locale
 import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.CancellationException
 
 data class PlaceSearchResult(
     val title: String,
@@ -25,6 +26,10 @@ data class PlaceSearchResult(
 class GeocodingHelper(private val context: Context) {
 
     private val geocoder = Geocoder(context, Locale.getDefault())
+
+    private suspend fun <T : Any> awaitGeocoder(block: (kotlinx.coroutines.CancellableContinuation<T>) -> Unit): T =
+        kotlinx.coroutines.withTimeoutOrNull(5_000L) { suspendCancellableCoroutine(block) }
+            ?: throw java.io.IOException("Geocoder timed out")
 
     /**
      * Searches places using Android Geocoder with local proximity bias,
@@ -52,15 +57,15 @@ class GeocodingHelper(private val context: Context) {
                         val upperRightLon = (userLng + 1.5).coerceAtMost(180.0)
 
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            suspendCoroutine { continuation ->
+                            awaitGeocoder { continuation ->
                                 geocoder.getFromLocationName(
                                     query, maxResults, lowerLeftLat, lowerLeftLon, upperRightLat, upperRightLon,
                                     object : Geocoder.GeocodeListener {
                                         override fun onGeocode(addresses: MutableList<Address>) {
-                                            continuation.resume(addresses)
+                                            if (continuation.isActive) continuation.resume(addresses)
                                         }
                                         override fun onError(errorMessage: String?) {
-                                            continuation.resume(mutableListOf())
+                                            if (continuation.isActive) continuation.resume(mutableListOf())
                                         }
                                     }
                                 )
@@ -78,13 +83,13 @@ class GeocodingHelper(private val context: Context) {
                     } else {
                         // General fallback on Android Geocoder
                         val generalAddresses = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            suspendCoroutine { continuation ->
+                            awaitGeocoder { continuation ->
                                 geocoder.getFromLocationName(query, maxResults, object : Geocoder.GeocodeListener {
                                     override fun onGeocode(addresses: MutableList<Address>) {
-                                        continuation.resume(addresses)
+                                        if (continuation.isActive) continuation.resume(addresses)
                                     }
                                     override fun onError(errorMessage: String?) {
-                                        continuation.resume(mutableListOf())
+                                        if (continuation.isActive) continuation.resume(mutableListOf())
                                     }
                                 })
                             }
@@ -95,6 +100,8 @@ class GeocodingHelper(private val context: Context) {
                         results.addAll(generalAddresses.map { addressToSearchResult(it) })
                     }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 Log.w("GeocodingHelper", "Native geocoder error: ${e.message}")
             }
@@ -111,26 +118,32 @@ class GeocodingHelper(private val context: Context) {
                         setRequestProperty("User-Agent", "TravelAlarm/1.0")
                     }
 
-                    if (connection.responseCode == 200) {
-                        val responseText = connection.inputStream.bufferedReader().use { it.readText() }
-                        val jsonObject = org.json.JSONObject(responseText)
-                        val features = jsonObject.optJSONArray("features") ?: JSONArray()
+                    try {
+                        if (connection.responseCode == 200) {
+                            val responseText = connection.inputStream.bufferedReader().use { it.readText() }
+                            val jsonObject = org.json.JSONObject(responseText)
+                            val features = jsonObject.optJSONArray("features") ?: JSONArray()
 
-                        for (i in 0 until features.length()) {
-                            val feature = features.getJSONObject(i)
-                            val geometry = feature.getJSONObject("geometry")
-                            val coordinates = geometry.getJSONArray("coordinates")
-                            val lng = coordinates.getDouble(0)
-                            val lat = coordinates.getDouble(1)
+                            for (i in 0 until features.length()) {
+                                val feature = features.getJSONObject(i)
+                                val geometry = feature.getJSONObject("geometry")
+                                val coordinates = geometry.getJSONArray("coordinates")
+                                val lng = coordinates.getDouble(0)
+                                val lat = coordinates.getDouble(1)
 
-                            val properties = feature.getJSONObject("properties")
-                            val name = properties.optString("name", query)
-                            val city = properties.optString("city", properties.optString("county", properties.optString("state", "")))
-                            val subtitle = listOfNotNull(properties.optString("street").takeIf { it.isNotBlank() }, city.takeIf { it.isNotBlank() }, properties.optString("country").takeIf { it.isNotBlank() }).joinToString(", ")
+                                val properties = feature.getJSONObject("properties")
+                                val name = properties.optString("name", query)
+                                val city = properties.optString("city", properties.optString("county", properties.optString("state", "")))
+                                val subtitle = listOfNotNull(properties.optString("street").takeIf { it.isNotBlank() }, city.takeIf { it.isNotBlank() }, properties.optString("country").takeIf { it.isNotBlank() }).joinToString(", ")
 
-                            results.add(PlaceSearchResult(title = name, subtitle = subtitle, latitude = lat, longitude = lng))
+                                results.add(PlaceSearchResult(title = name, subtitle = subtitle, latitude = lat, longitude = lng))
+                            }
                         }
+                    } finally {
+                        connection.disconnect()
                     }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (e: Exception) {
                     Log.w("GeocodingHelper", "Photon OSM search error: ${e.message}")
                 }
@@ -148,20 +161,20 @@ class GeocodingHelper(private val context: Context) {
 
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    suspendCoroutine { continuation ->
+                    awaitGeocoder { continuation ->
                         geocoder.getFromLocation(latitude, longitude, 1, object : Geocoder.GeocodeListener {
                             override fun onGeocode(addresses: MutableList<Address>) {
                                 if (addresses.isNotEmpty()) {
                                     val addr = addresses[0]
                                     val name = formatSelectedAddress(addr)
-                                    continuation.resume(name)
+                                    if (continuation.isActive) continuation.resume(name)
                                 } else {
-                                    continuation.resume(String.format(Locale.US, "Point (%.4f, %.4f)", latitude, longitude))
+                                    if (continuation.isActive) continuation.resume(String.format(Locale.US, "Point (%.4f, %.4f)", latitude, longitude))
                                 }
                             }
 
                             override fun onError(errorMessage: String?) {
-                                continuation.resume(String.format(Locale.US, "Point (%.4f, %.4f)", latitude, longitude))
+                                if (continuation.isActive) continuation.resume(String.format(Locale.US, "Point (%.4f, %.4f)", latitude, longitude))
                             }
                         })
                     }
@@ -175,6 +188,8 @@ class GeocodingHelper(private val context: Context) {
                         String.format(Locale.US, "Point (%.4f, %.4f)", latitude, longitude)
                     }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 String.format(Locale.US, "Point (%.4f, %.4f)", latitude, longitude)
             }
@@ -189,18 +204,18 @@ class GeocodingHelper(private val context: Context) {
 
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    suspendCoroutine { continuation ->
+                    awaitGeocoder { continuation ->
                         geocoder.getFromLocation(latitude, longitude, 1, object : Geocoder.GeocodeListener {
                             override fun onGeocode(addresses: MutableList<Address>) {
                                 if (addresses.isNotEmpty()) {
-                                    continuation.resume(formatLandmarkText(addresses[0]))
+                                    if (continuation.isActive) continuation.resume(formatLandmarkText(addresses[0]))
                                 } else {
-                                    continuation.resume("GPS Coordinates: ${String.format(Locale.US, "%.4f, %.4f", latitude, longitude)}")
+                                    if (continuation.isActive) continuation.resume("GPS Coordinates: ${String.format(Locale.US, "%.4f, %.4f", latitude, longitude)}")
                                 }
                             }
 
                             override fun onError(errorMessage: String?) {
-                                continuation.resume("GPS Coordinates: ${String.format(Locale.US, "%.4f, %.4f", latitude, longitude)}")
+                                if (continuation.isActive) continuation.resume("GPS Coordinates: ${String.format(Locale.US, "%.4f, %.4f", latitude, longitude)}")
                             }
                         })
                     }
@@ -213,6 +228,8 @@ class GeocodingHelper(private val context: Context) {
                         "GPS Coordinates: ${String.format(Locale.US, "%.4f, %.4f", latitude, longitude)}"
                     }
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (e: Exception) {
                 "GPS Coordinates: ${String.format(Locale.US, "%.4f, %.4f", latitude, longitude)}"
             }

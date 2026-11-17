@@ -46,14 +46,6 @@
                     android:letterSpacing="0.02"
                     android:textColor="@color/white" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Destination travel alarm"
-                    android:textSize="11sp"
-                    android:letterSpacing="0.04"
-                    android:textColor="#93C5FD" />
-
             </LinearLayout>
 
             <com.google.android.material.button.MaterialButton
@@ -131,7 +123,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="LIVE STATUS"
-                            android:textSize="10sp"
+                            android:textSize="12sp"
                             android:textStyle="bold"
                             android:letterSpacing="0.14"
                             android:textColor="@color/text_muted" />
@@ -141,7 +133,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="IDLE"
-                            android:textSize="10sp"
+                            android:textSize="12sp"
                             android:textStyle="bold"
                             android:letterSpacing="0.06"
                             android:paddingHorizontal="10dp"
@@ -156,7 +148,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:text="Ready: Set a destination below"
+                        android:text="Choose a destination"
                         android:textSize="14sp"
                         android:textColor="@color/text_secondary"
                         android:lineSpacingExtra="2dp" />
@@ -280,7 +272,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="SELECT DESTINATION"
-                            android:textSize="11sp"
+                            android:textSize="12sp"
                             android:textStyle="bold"
                             android:letterSpacing="0.05"
                             android:textColor="@color/text_secondary" />
@@ -288,9 +280,9 @@
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnClearDestination"
                             android:layout_width="wrap_content"
-                            android:layout_height="32dp"
+                            android:layout_height="48dp"
                             android:text="Clear"
-                            android:textSize="11sp"
+                            android:textSize="12sp"
                             android:textColor="@color/status_red"
                             app:icon="@drawable/ic_clear"
                             app:iconTint="@color/status_red"
@@ -317,7 +309,7 @@
                             android:layout_width="0dp"
                             android:layout_height="48dp"
                             android:layout_weight="1"
-                            android:text="Pick on Map"
+                            android:text="Map"
                             android:textSize="13sp"
                             android:textStyle="bold"
                             android:textColor="@color/white"
@@ -334,7 +326,7 @@
                             android:layout_width="0dp"
                             android:layout_height="48dp"
                             android:layout_weight="1"
-                            android:text="Paste Link"
+                            android:text="Import link"
                             android:textSize="13sp"
                             android:textColor="@color/accent"
                             app:cornerRadius="10dp"
@@ -390,7 +382,6 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:hint="Selected Destination Name"
-                        app:helperText="Edit this for custom voice announcements (e.g. 'Home')"
                         app:helperTextTextColor="@color/text_secondary"
                         app:boxStrokeColor="@color/text_accent"
                         app:hintTextColor="@color/text_accent"
@@ -478,7 +469,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:text="SAVED LOCATIONS"
-                            android:textSize="11sp"
+                            android:textSize="12sp"
                             android:textStyle="bold"
                             android:letterSpacing="0.05"
                             android:textColor="@color/text_secondary" />
@@ -486,9 +477,9 @@
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnManageSavedLocations"
                             android:layout_width="wrap_content"
-                            android:layout_height="32dp"
+                            android:layout_height="48dp"
                             android:text="Manage"
-                            android:textSize="11sp"
+                            android:textSize="12sp"
                             android:textColor="@color/text_accent"
                             app:icon="@drawable/ic_location"
                             app:iconTint="@color/text_accent"
@@ -527,15 +518,6 @@
                             android:textStyle="bold"
                             android:textColor="@color/text_secondary" />
 
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Pick a location on the map to save it for 1-tap trip start!"
-                            android:textSize="11sp"
-                            android:textColor="@color/text_muted"
-                            android:gravity="center"
-                            android:layout_marginTop="4dp" />
-
                     </LinearLayout>
 
                 </LinearLayout>
@@ -562,8 +544,8 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="VOICE ALERT LANGUAGE (REGIONAL TTS)"
-                        android:textSize="11sp"
+                        android:text="VOICE LANGUAGE"
+                        android:textSize="12sp"
                         android:textStyle="bold"
                         android:letterSpacing="0.05"
                         android:textColor="@color/text_secondary" />
@@ -577,7 +559,7 @@
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnLangEnglish"
                             android:layout_width="0dp"
-                            android:layout_height="42dp"
+                            android:layout_height="48dp"
                             android:layout_weight="1"
                             android:text="English"
                             android:textSize="13sp"
@@ -588,7 +570,7 @@
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnLangTamil"
                             android:layout_width="0dp"
-                            android:layout_height="42dp"
+                            android:layout_height="48dp"
                             android:layout_weight="1"
                             android:text="தமிழ்"
                             android:textSize="13sp"
@@ -600,7 +582,7 @@
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/btnLangHindi"
                             android:layout_width="0dp"
-                            android:layout_height="42dp"
+                            android:layout_height="48dp"
                             android:layout_weight="1"
                             android:text="हिन्दी"
                             android:textSize="13sp"

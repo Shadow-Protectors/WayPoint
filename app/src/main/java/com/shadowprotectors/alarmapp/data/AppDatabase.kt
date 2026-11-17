@@ -6,9 +6,6 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 @Database(entities = [SavedLocation::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
@@ -33,18 +30,17 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                 """.trimIndent())
 
-                try {
-                    db.execSQL("""
+                db.execSQL("""
                         INSERT INTO `saved_locations` (`custom_name`, `latitude`, `longitude`, `created_at`, `last_used_at`, `use_count`)
                         SELECT `name`, `latitude`, `longitude`, `created_at`, `created_at`, 1
                         FROM `destinations`
-                    """)
-                } catch (_: Exception) {}
+                """)
             }
         }
 
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
+                INSTANCE?.let { return@synchronized it }
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
@@ -54,19 +50,19 @@ abstract class AppDatabase : RoomDatabase() {
                 .addCallback(object : RoomDatabase.Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {
                         super.onCreate(db)
-                        CoroutineScope(Dispatchers.IO).launch {
-                            val dao = getInstance(context).savedLocationDao()
-                            val now = System.currentTimeMillis()
-                            val presets = listOf(
-                                SavedLocation(customName = "🚆 Madurai Junction", latitude = 9.9196, longitude = 78.1100, createdAt = now, lastUsedAt = now, useCount = 1),
-                                SavedLocation(customName = "🚆 Chennai Central", latitude = 13.0827, longitude = 80.2707, createdAt = now, lastUsedAt = now, useCount = 1),
-                                SavedLocation(customName = "✈️ Chennai Airport", latitude = 12.9941, longitude = 80.1709, createdAt = now, lastUsedAt = now, useCount = 1),
-                                SavedLocation(customName = "🚆 Coimbatore Junction", latitude = 10.9972, longitude = 76.9634, createdAt = now, lastUsedAt = now, useCount = 1),
-                                SavedLocation(customName = "🚆 Bengaluru Majestic", latitude = 12.9781, longitude = 77.5696, createdAt = now, lastUsedAt = now, useCount = 1)
+                        val now = System.currentTimeMillis()
+                        val presets = listOf(
+                            SavedLocation(customName = "🚆 Madurai Junction", latitude = 9.9196, longitude = 78.1100, createdAt = now, lastUsedAt = now, useCount = 1),
+                            SavedLocation(customName = "🚆 Chennai Central", latitude = 13.0827, longitude = 80.2707, createdAt = now, lastUsedAt = now, useCount = 1),
+                            SavedLocation(customName = "✈️ Chennai Airport", latitude = 12.9941, longitude = 80.1709, createdAt = now, lastUsedAt = now, useCount = 1),
+                            SavedLocation(customName = "🚆 Coimbatore Junction", latitude = 10.9972, longitude = 76.9634, createdAt = now, lastUsedAt = now, useCount = 1),
+                            SavedLocation(customName = "🚆 Bengaluru Majestic", latitude = 12.9781, longitude = 77.5696, createdAt = now, lastUsedAt = now, useCount = 1)
+                        )
+                        for (p in presets) {
+                            db.execSQL(
+                                "INSERT INTO saved_locations (custom_name, latitude, longitude, created_at, last_used_at, use_count) VALUES (?, ?, ?, ?, ?, ?)",
+                                arrayOf<Any>(p.customName, p.latitude, p.longitude, p.createdAt, p.lastUsedAt, p.useCount)
                             )
-                            for (p in presets) {
-                                dao.insert(p)
-                            }
                         }
                     }
                 })

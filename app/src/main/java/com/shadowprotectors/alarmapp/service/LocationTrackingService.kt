@@ -121,6 +121,7 @@ class LocationTrackingService : Service() {
     private val speedEstimator = com.shadowprotectors.alarmapp.engine.MotionSpeedEstimator()
     private var silencePendingIntent: PendingIntent? = null
     private var lastNotifiedEta: Int? = null
+    private var trackingActive = false
 
     override fun onCreate() {
         super.onCreate()
@@ -139,6 +140,14 @@ class LocationTrackingService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
+                // Repeated taps must not replace a live session or register another callback.
+                if (trackingActive) return START_NOT_STICKY
+                val latitude = intent.getDoubleExtra(EXTRA_DEST_LAT, Double.NaN)
+                val longitude = intent.getDoubleExtra(EXTRA_DEST_LNG, Double.NaN)
+                if (!latitude.isFinite() || !longitude.isFinite() || latitude !in -90.0..90.0 || longitude !in -180.0..180.0) {
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 destinationName = intent.getStringExtra(EXTRA_DEST_NAME) ?: "Destination"
                 destLat = intent.getDoubleExtra(EXTRA_DEST_LAT, 0.0)
                 destLng = intent.getDoubleExtra(EXTRA_DEST_LNG, 0.0)
@@ -154,7 +163,12 @@ class LocationTrackingService : Service() {
                     else -> SupportedLanguage.ENGLISH
                 }
 
-                startForegroundTracking()
+                try {
+                    startForegroundTracking()
+                } catch (error: RuntimeException) {
+                    Log.e("TrackingService", "Unable to start tracking", error)
+                    stopForegroundTracking()
+                }
             }
             ACTION_UPDATE_LANGUAGE -> {
                 val langCode = intent.getStringExtra(EXTRA_LANG_CODE) ?: "en"
@@ -188,6 +202,7 @@ class LocationTrackingService : Service() {
                 stopForegroundTracking()
             }
         }
+        if (!trackingActive) stopSelf()
         return START_NOT_STICKY
     }
 
@@ -202,7 +217,7 @@ class LocationTrackingService : Service() {
             Intent(this, LocationTrackingService::class.java).apply { action = ACTION_STOP_ALARM },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val initialNotification = NotificationHelper.buildTrackingNotification(
-            this, destinationName, 0.0, null, stopPendingIntent!!, silencePendingIntent
+            this, destinationName, Double.MAX_VALUE, null, stopPendingIntent!!, silencePendingIntent
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -216,6 +231,7 @@ class LocationTrackingService : Service() {
             startForeground(NotificationHelper.NOTIFICATION_TRACKING_ID, initialNotification)
         }
 
+        trackingActive = true
         alertManager.reset()
         directionFilter.reset()
         lastNotifiedDistanceKm = Double.MAX_VALUE
@@ -229,6 +245,7 @@ class LocationTrackingService : Service() {
 
         val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, activeProfile.pollingIntervalMs)
             .setMinUpdateIntervalMillis(activeProfile.minUpdateIntervalMs)
+            .setMaxUpdateAgeMillis(0)
             .build()
 
         locationCallback = object : LocationCallback() {
@@ -241,6 +258,10 @@ class LocationTrackingService : Service() {
 
         try {
             fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback!!, mainLooper)
+                .addOnFailureListener {
+                    Log.e("TrackingService", "Location updates unavailable", it)
+                    stopForegroundTracking()
+                }
         } catch (e: SecurityException) {
             Log.e("TrackingService", "Location permission missing: ${e.message}")
             stopSelf()
@@ -250,6 +271,9 @@ class LocationTrackingService : Service() {
     private var lastLocation: Location? = null
 
     private fun handleLocationUpdate(location: Location) {
+        if (!trackingActive || !location.latitude.isFinite() || !location.longitude.isFinite()) return
+        val ageNanos = android.os.SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos
+        if (ageNanos < 0 || ageNanos > 60_000_000_000L) return
         val distanceKm = DistanceEngine.calculateDistanceKm(location.latitude, location.longitude, destLat, destLng)
         val targetBearing = DistanceEngine.calculateBearing(location.latitude, location.longitude, destLat, destLng)
         // Only trust bearing if the user is moving at a measurable speed (> 0.5 m/s or 1.8 km/h)
@@ -311,7 +335,12 @@ class LocationTrackingService : Service() {
                     putExtra(AlarmTriggerActivity.EXTRA_DISTANCE_KM, distanceKm)
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                 }
-                startActivity(alarmActivityIntent)
+                try {
+                    startActivity(alarmActivityIntent)
+                } catch (error: RuntimeException) {
+                    // The notification remains available if activity launch is restricted.
+                    Log.w("TrackingService", "Alarm activity could not open", error)
+                }
             }
         }
 
@@ -339,6 +368,7 @@ class LocationTrackingService : Service() {
             || newState.approachState != prev.approachState
             || newState.alertLevel != prev.alertLevel
             || newState.tripMode != prev.tripMode
+            || newState.destinationName != prev.destinationName
         if (significantChange) {
             lastEmittedState = newState
             ServiceEventBus.updateState(newState)
@@ -346,7 +376,9 @@ class LocationTrackingService : Service() {
     }
 
     private fun stopForegroundTracking() {
+        trackingActive = false
         locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
+        locationCallback = null
         alertManager.stopAlarm()
         AudioAlarmHelper.stopFullAlarm(this)
         voiceAlertHelper.shutdown()

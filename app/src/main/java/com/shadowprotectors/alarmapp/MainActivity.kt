@@ -81,6 +81,8 @@ class MainActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.coordinatorLayout) { _, insets ->
             val statusBarHeight = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
             binding.appBarLayout.setPadding(0, statusBarHeight, 0, 0)
+            val bars = insets.getInsets(WindowInsetsCompat.Type.navigationBars())
+            binding.coordinatorLayout.setPadding(bars.left, 0, bars.right, bars.bottom)
             insets
         }
 
@@ -125,8 +127,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var importJob: Job? = null
+
     private fun importSharedLocation(rawInput: String) {
-        lifecycleScope.launch {
+        importJob?.cancel()
+        importJob = lifecycleScope.launch {
             Toast.makeText(this@MainActivity, "Parsing shared destination...", Toast.LENGTH_SHORT).show()
             val parsed = LocationLinkParser.parse(rawInput)
             if (parsed != null) {
@@ -140,7 +145,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setDestination(name: String, lat: Double, lng: Double) {
-        if (isCurrentlyTracking) return
+        if (isCurrentlyTracking || !lat.isFinite() || !lng.isFinite() || lat !in -90.0..90.0 || lng !in -180.0..180.0) return
         binding.etDestName.setText(name)
         binding.etLatitude.setText(String.format(Locale.US, "%.5f", lat))
         binding.etLongitude.setText(String.format(Locale.US, "%.5f", lng))
@@ -149,8 +154,8 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("travel_alarm_prefs", Context.MODE_PRIVATE)
         prefs.edit()
             .putString("PREF_DEST_NAME", name)
-            .putFloat("PREF_DEST_LAT", lat.toFloat())
-            .putFloat("PREF_DEST_LNG", lng.toFloat())
+            .putString("PREF_DEST_LAT_EXACT", lat.toString())
+            .putString("PREF_DEST_LNG_EXACT", lng.toString())
             .apply()
 
         // Update landmark confirmation
@@ -172,10 +177,10 @@ class MainActivity : AppCompatActivity() {
     private fun restoreSavedDestination() {
         val prefs = getSharedPreferences("travel_alarm_prefs", Context.MODE_PRIVATE)
         val savedName = prefs.getString("PREF_DEST_NAME", null)
-        val savedLat = prefs.getFloat("PREF_DEST_LAT", -999f)
-        val savedLng = prefs.getFloat("PREF_DEST_LNG", -999f)
+        val savedLat = prefs.getString("PREF_DEST_LAT_EXACT", null)?.toDoubleOrNull() ?: prefs.getFloat("PREF_DEST_LAT", -999f).toDouble()
+        val savedLng = prefs.getString("PREF_DEST_LNG_EXACT", null)?.toDoubleOrNull() ?: prefs.getFloat("PREF_DEST_LNG", -999f).toDouble()
 
-        if (!savedName.isNullOrBlank() && savedLat != -999f && savedLng != -999f) {
+        if (!savedName.isNullOrBlank() && savedLat in -90.0..90.0 && savedLng in -180.0..180.0) {
             val lat = savedLat.toDouble()
             val lng = savedLng.toDouble()
             binding.etDestName.setText(savedName)
@@ -197,7 +202,7 @@ class MainActivity : AppCompatActivity() {
         landmarkJob?.cancel()
         landmarkJob = lifecycleScope.launch {
             val landmarkText = geocodingHelper.getLandmarkConfirmation(lat, lng)
-            binding.tvLandmarkConfirmation.text = "📍 Verified: $landmarkText"
+            binding.tvLandmarkConfirmation.text = landmarkText
             binding.cardLandmarkConfirmation.isVisible = true
         }
     }
@@ -249,6 +254,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun clearDestination() {
+        importJob?.cancel()
         landmarkJob?.cancel()
         binding.etDestName.setText("")
         binding.etLatitude.setText("")
@@ -261,6 +267,8 @@ class MainActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("travel_alarm_prefs", Context.MODE_PRIVATE)
         prefs.edit()
             .remove("PREF_DEST_NAME")
+            .remove("PREF_DEST_LAT_EXACT")
+            .remove("PREF_DEST_LNG_EXACT")
             .remove("PREF_DEST_LAT")
             .remove("PREF_DEST_LNG")
             .apply()
@@ -502,6 +510,9 @@ class MainActivity : AppCompatActivity() {
 
         val missing = permissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }.toMutableList()
+        if (Manifest.permission.ACCESS_FINE_LOCATION in missing && Manifest.permission.ACCESS_COARSE_LOCATION !in missing) {
+            missing.add(Manifest.permission.ACCESS_COARSE_LOCATION)
         }
 
         if (missing.isEmpty()) {
@@ -545,7 +556,7 @@ class MainActivity : AppCompatActivity() {
         )
 
         LocationTrackingService.startService(this, request)
-        Toast.makeText(this, "${selectedTripMode.icon} Background alarm active (${selectedTripMode.displayName})", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Trip started", Toast.LENGTH_SHORT).show()
     }
 
     private fun stopTrackingService() {
@@ -555,7 +566,7 @@ class MainActivity : AppCompatActivity() {
         notificationManager.cancelAll()
         ServiceEventBus.resetState()
         updateUiFromTrackingState(TrackingState())
-        Toast.makeText(this, "Background tracking stopped & terminated", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Trip stopped", Toast.LENGTH_SHORT).show()
     }
 
     private fun observeTrackingState() {
@@ -593,7 +604,7 @@ class MainActivity : AppCompatActivity() {
         if (trackingState.isTracking) {
             return if (trackingState.alertLevel == AlertLevel.LEVEL_4_FULL_ALARM && !trackingState.alertsSilenced) {
                 com.shadowprotectors.alarmapp.engine.BusUiState.LimitReached(trackingState.destinationName)
-            } else if (trackingState.distanceKm == Double.MAX_VALUE || trackingState.distanceKm <= 0.0) {
+            } else if (trackingState.distanceKm == Double.MAX_VALUE || trackingState.distanceKm < 0.0) {
                 com.shadowprotectors.alarmapp.engine.BusUiState.Partial("Acquiring GPS location fix…")
             } else {
                 com.shadowprotectors.alarmapp.engine.BusUiState.Offline(
@@ -611,10 +622,10 @@ class MainActivity : AppCompatActivity() {
 
         val lat = latStr.toDoubleOrNull()
         val lng = lngStr.toDoubleOrNull()
-        if (latStr.isNotEmpty() && (lat == null || lat < -90.0 || lat > 90.0)) {
+        if (latStr.isNotEmpty() && (lat == null || !lat.isFinite() || lat < -90.0 || lat > 90.0)) {
             return com.shadowprotectors.alarmapp.engine.BusUiState.Error("Invalid Latitude (-90 to +90)")
         }
-        if (lngStr.isNotEmpty() && (lng == null || lng < -180.0 || lng > 180.0)) {
+        if (lngStr.isNotEmpty() && (lng == null || !lng.isFinite() || lng < -180.0 || lng > 180.0)) {
             return com.shadowprotectors.alarmapp.engine.BusUiState.Error("Invalid Longitude (-180 to +180)")
         }
 
@@ -627,18 +638,22 @@ class MainActivity : AppCompatActivity() {
         binding.btnSilenceAlerts.isEnabled = !tracking.alertsSilenced
         binding.btnSilenceAlerts.text = if (tracking.alertsSilenced) "Alerts off for this trip" else "I'm awake - stop alerts"
         binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+        binding.tvAlertLevelBadge.isVisible = tracking.isTracking
+        binding.tvAlertLevelBadge.text = if (tracking.alertsSilenced) "Alerts off" else "Monitoring"
+        binding.tvAlertLevelBadge.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+        binding.tvAlertLevelBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.surface_elevated))
         when (state) {
             is com.shadowprotectors.alarmapp.engine.BusUiState.Idle -> {
                 binding.btnToggleTracking.isVisible = true
-                binding.btnToggleTracking.text = "Start Background Destination Alarm"
+                binding.btnToggleTracking.text = "Start alarm"
                 binding.btnToggleTracking.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.primary))
                 binding.btnStopTracking.isVisible = false
 
-                binding.tvStatus.text = "🚌 Bus Alarm Idle: Ready to start"
+                binding.tvStatus.text = "Ready to start"
                 if (binding.tvDistance.text.isNullOrBlank()) {
                     binding.tvDistance.text = "-- km"
                 }
-                if (binding.tvEta.text.isNullOrBlank()) {
+                if (!tracking.isTracking) {
                     binding.tvEta.text = "--:--"
                 }
                 binding.tvApproachBadge.text = "Idle"
@@ -650,21 +665,21 @@ class MainActivity : AppCompatActivity() {
 
             is com.shadowprotectors.alarmapp.engine.BusUiState.Empty -> {
                 renderBusUiState(com.shadowprotectors.alarmapp.engine.BusUiState.Idle)
-                binding.tvStatus.text = "No Destination Selected: Pick location below"
+                binding.tvStatus.text = "Choose a destination"
                 binding.tvDistance.text = "-- km"
                 binding.tvEta.text = "--:--"
                 binding.tvApproachBadge.text = "Empty"
             }
 
             is com.shadowprotectors.alarmapp.engine.BusUiState.Loading -> {
-                binding.tvStatus.text = "⏳ ${state.message}"
+                binding.tvStatus.text = state.message
                 binding.tvApproachBadge.text = "Loading"
                 binding.tvApproachBadge.setTextColor(ContextCompat.getColor(this, R.color.text_accent))
                 binding.tvApproachBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.surface_elevated))
             }
 
             is com.shadowprotectors.alarmapp.engine.BusUiState.Error -> {
-                binding.tvStatus.text = "⚠️ ${state.message}"
+                binding.tvStatus.text = state.message
                 binding.tvApproachBadge.text = "Error"
                 binding.tvApproachBadge.setTextColor(ContextCompat.getColor(this, R.color.status_red_text))
                 binding.tvApproachBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.status_red_bg))
@@ -675,7 +690,7 @@ class MainActivity : AppCompatActivity() {
                 binding.btnToggleTracking.isVisible = false
                 binding.btnStopTracking.isVisible = true
                 binding.btnStopTracking.backgroundTintList = ColorStateList.valueOf(ContextCompat.getColor(this, R.color.status_red))
-                binding.tvStatus.text = "🟡 ${state.message}"
+                binding.tvStatus.text = state.message
                 binding.tvDistance.text = "Acquiring…"
                 binding.tvEta.text = "Acquiring GPS fix…"
                 binding.tvApproachBadge.text = "Locating GPS"
@@ -696,17 +711,17 @@ class MainActivity : AppCompatActivity() {
 
                 when (state.approachState) {
                     ApproachState.APPROACHING -> {
-                        binding.tvApproachBadge.text = "🟢 Approaching"
+                        binding.tvApproachBadge.text = "Approaching"
                         binding.tvApproachBadge.setTextColor(ContextCompat.getColor(this, R.color.status_green_text))
                         binding.tvApproachBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.status_green_bg))
                     }
                     ApproachState.CIRCLING_LOOP -> {
-                        binding.tvApproachBadge.text = "🟡 Detour / Loop Filtered"
+                        binding.tvApproachBadge.text = "Detour"
                         binding.tvApproachBadge.setTextColor(ContextCompat.getColor(this, R.color.status_amber_text))
                         binding.tvApproachBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.status_amber_bg))
                     }
                     ApproachState.RECEDING -> {
-                        binding.tvApproachBadge.text = "🔴 Moving Away"
+                        binding.tvApproachBadge.text = "Moving away"
                         binding.tvApproachBadge.setTextColor(ContextCompat.getColor(this, R.color.status_red_text))
                         binding.tvApproachBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.status_red_bg))
                     }
@@ -721,35 +736,35 @@ class MainActivity : AppCompatActivity() {
                     AlertLevel.LEVEL_4_FULL_ALARM -> {
                         binding.cardTrackingStatus.setCardBackgroundColor(ContextCompat.getColor(this, R.color.status_red_bg))
                         binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.status_red_text))
-                        binding.tvAlertLevelBadge.text = "🚨 Level 4: Full Emergency Siren Active (0.5 km)"
+                        binding.tvAlertLevelBadge.text = "Wake-up alarm"
                         binding.tvAlertLevelBadge.setTextColor(ContextCompat.getColor(this, R.color.status_red_text))
                         binding.tvAlertLevelBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.status_red_bg))
                     }
                     AlertLevel.LEVEL_3_VOICE -> {
                         binding.cardTrackingStatus.setCardBackgroundColor(ContextCompat.getColor(this, R.color.status_violet_bg))
                         binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.status_violet_text))
-                        binding.tvAlertLevelBadge.text = "🔊 Level 3: Regional Voice Announcement (1.0 km)"
+                        binding.tvAlertLevelBadge.text = "Voice reminder"
                         binding.tvAlertLevelBadge.setTextColor(ContextCompat.getColor(this, R.color.status_violet_text))
                         binding.tvAlertLevelBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.status_violet_bg))
                     }
                     AlertLevel.LEVEL_2_VIBRATE -> {
                         binding.cardTrackingStatus.setCardBackgroundColor(ContextCompat.getColor(this, R.color.status_amber_bg))
                         binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.status_amber_text))
-                        binding.tvAlertLevelBadge.text = "📳 Level 2: Vibration Pulse Alert (2.0 km)"
+                        binding.tvAlertLevelBadge.text = "Proximity alert"
                         binding.tvAlertLevelBadge.setTextColor(ContextCompat.getColor(this, R.color.status_amber_text))
                         binding.tvAlertLevelBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.status_amber_bg))
                     }
                     AlertLevel.LEVEL_1_SILENT -> {
                         binding.cardTrackingStatus.setCardBackgroundColor(ContextCompat.getColor(this, R.color.status_green_bg))
                         binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.status_green_text))
-                        binding.tvAlertLevelBadge.text = "🔵 Level 1: Heads-Up Alert (5.0 km)"
+                        binding.tvAlertLevelBadge.text = "Heads-up"
                         binding.tvAlertLevelBadge.setTextColor(ContextCompat.getColor(this, R.color.status_green_text))
                         binding.tvAlertLevelBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.status_green_bg))
                     }
                     AlertLevel.NONE -> {
                         binding.cardTrackingStatus.setCardBackgroundColor(ContextCompat.getColor(this, R.color.surface_card))
                         binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
-                        binding.tvAlertLevelBadge.text = "📡 Monitoring Distance En Route"
+                        binding.tvAlertLevelBadge.text = if (currentState.alertsSilenced) "Alerts off" else "Monitoring"
                         binding.tvAlertLevelBadge.setTextColor(ContextCompat.getColor(this, R.color.text_secondary))
                         binding.tvAlertLevelBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.surface_elevated))
                     }
@@ -759,7 +774,7 @@ class MainActivity : AppCompatActivity() {
             is com.shadowprotectors.alarmapp.engine.BusUiState.Disabled -> {
                 binding.btnToggleTracking.isVisible = !isCurrentlyTracking
                 binding.btnStopTracking.isVisible = isCurrentlyTracking
-                binding.tvStatus.text = "🚫 Location (GPS) Disabled in System Settings"
+                binding.tvStatus.text = "Location is off"
                 binding.tvDistance.text = "-- km"
                 binding.tvEta.text = "--:--"
                 binding.tvApproachBadge.text = "GPS Off"
@@ -771,8 +786,10 @@ class MainActivity : AppCompatActivity() {
             is com.shadowprotectors.alarmapp.engine.BusUiState.LimitReached -> {
                 binding.btnToggleTracking.isVisible = false
                 binding.btnStopTracking.isVisible = true
-                binding.tvStatus.text = "🛑 Destination Reached! (${state.destinationName})"
-                binding.tvDistance.text = "Level 4 Wake Alarm Active"
+                binding.tvStatus.text = "Near ${state.destinationName}"
+                binding.tvDistance.text = String.format(Locale.US, "%.2f km", tracking.distanceKm)
+                binding.tvEta.text = formatEta(tracking.etaMinutes)
+                binding.tvAlertLevelBadge.text = "Wake-up alarm"
                 binding.tvApproachBadge.text = "ALARM ACTIVE"
                 binding.tvApproachBadge.setTextColor(ContextCompat.getColor(this, R.color.status_red_text))
                 binding.tvApproachBadge.setBackgroundColor(ContextCompat.getColor(this, R.color.status_red_bg))
@@ -785,7 +802,7 @@ class MainActivity : AppCompatActivity() {
     private fun formatEta(etaMinutes: Int?): String {
         val effectiveMinutes = etaMinutes ?: return "Waiting for movement"
         return when {
-            effectiveMinutes < 1  -> "NOW!"
+            effectiveMinutes < 1  -> "Now"
             effectiveMinutes < 60 -> "${effectiveMinutes} min"
             else -> {
                 val hrs  = effectiveMinutes / 60

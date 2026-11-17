@@ -15,6 +15,8 @@ class SavedLocationRepository(private val dao: SavedLocationDao) {
 
     suspend fun update(savedLocation: SavedLocation) = dao.update(savedLocation)
 
+    suspend fun rename(id: Long, name: String) = dao.rename(id, name)
+
     suspend fun delete(savedLocation: SavedLocation) = dao.delete(savedLocation)
 
     suspend fun deleteById(id: Long) = dao.deleteById(id)
@@ -42,11 +44,6 @@ class SavedLocationRepository(private val dao: SavedLocationDao) {
      * Marks a location as used by updating timestamp and usage count.
      */
     suspend fun recordUsage(id: Long) {
-        val loc = dao.getById(id) ?: return
-        val updated = loc.copy(
-            lastUsedAt = System.currentTimeMillis(),
-            useCount = loc.useCount + 1
-        )
-        dao.update(updated)
+        dao.recordUsage(id, System.currentTimeMillis())
     }
 }

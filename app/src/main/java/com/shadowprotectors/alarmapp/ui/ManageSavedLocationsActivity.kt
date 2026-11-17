@@ -136,7 +136,7 @@ class ManageSavedLocationsActivity : AppCompatActivity() {
                 val newName = input.text.toString().trim()
                 if (newName.isNotEmpty()) {
                     lifecycleScope.launch {
-                        repository.update(location.copy(customName = newName))
+                        repository.rename(location.id, newName)
                         Toast.makeText(this@ManageSavedLocationsActivity, "Renamed to '$newName'", Toast.LENGTH_SHORT).show()
                     }
                 }

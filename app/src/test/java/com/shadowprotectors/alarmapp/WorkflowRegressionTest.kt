@@ -19,6 +19,13 @@ import java.time.Duration
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class WorkflowRegressionTest {
+    @org.junit.After fun closeDatabase() {
+        val field = com.shadowprotectors.alarmapp.data.AppDatabase::class.java.getDeclaredField("INSTANCE").apply { isAccessible = true }
+        (field.get(null) as? com.shadowprotectors.alarmapp.data.AppDatabase)?.close()
+        field.set(null, null)
+        com.shadowprotectors.alarmapp.service.ServiceEventBus.resetState()
+    }
+
     @Test fun progressiveAlertsEscalateAndDismissalStaysSilent() {
         val context = RuntimeEnvironment.getApplication()
         val voice = VoiceAlertHelper(context)

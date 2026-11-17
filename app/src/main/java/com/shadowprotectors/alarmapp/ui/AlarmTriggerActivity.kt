@@ -2,11 +2,17 @@ package com.shadowprotectors.alarmapp.ui
 
 import android.app.KeyguardManager
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.Lifecycle
+import kotlinx.coroutines.launch
+import com.shadowprotectors.alarmapp.service.ServiceEventBus
 import com.shadowprotectors.alarmapp.alert.AudioAlarmHelper
 import com.shadowprotectors.alarmapp.databinding.ActivityAlarmTriggerBinding
 import com.shadowprotectors.alarmapp.service.LocationTrackingService
@@ -27,11 +33,14 @@ class AlarmTriggerActivity : AppCompatActivity() {
         binding = ActivityAlarmTriggerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        val destName = intent.getStringExtra(EXTRA_DEST_NAME) ?: "Destination"
-        val distanceKm = intent.getDoubleExtra(EXTRA_DISTANCE_KM, 0.5)
-
-        binding.tvDestName.text = destName
-        binding.tvDistanceRemaining.text = String.format("Distance to stop: %.2f km", distanceKm)
+        showDestination(intent)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                ServiceEventBus.trackingState.collect { state ->
+                    if (!state.isTracking || state.alertsSilenced) finish()
+                }
+            }
+        }
 
         // Dismiss button click
         binding.btnDismissAlarm.setOnClickListener {
@@ -52,19 +61,16 @@ class AlarmTriggerActivity : AppCompatActivity() {
         finish()
     }
 
-    override fun onPause() {
-        super.onPause()
-        if (isFinishing) {
-            AudioAlarmHelper.stopFullAlarm(this)
-        }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        showDestination(intent)
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        if (isFinishing) {
-            LocationTrackingService.stopAlarm(this)
-            AudioAlarmHelper.stopFullAlarm(this)
-        }
+    private fun showDestination(intent: Intent) {
+        binding.tvDestName.text = intent.getStringExtra(EXTRA_DEST_NAME) ?: "Destination"
+        binding.tvDistanceRemaining.text = String.format(java.util.Locale.getDefault(),
+            "Distance to stop: %.2f km", intent.getDoubleExtra(EXTRA_DISTANCE_KM, 0.5))
     }
 
     private fun turnScreenOnAndShowOverLockscreen() {

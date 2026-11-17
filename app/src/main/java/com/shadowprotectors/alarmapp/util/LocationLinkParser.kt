@@ -1,158 +1,90 @@
 package com.shadowprotectors.alarmapp.util
 
 import android.net.Uri
-import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.regex.Pattern
 
-data class ParsedLocation(
-    val latitude: Double,
-    val longitude: Double,
-    val label: String? = null
-)
+data class ParsedLocation(val latitude: Double, val longitude: Double, val label: String? = null)
 
 object LocationLinkParser {
+    private const val NUMBER = "[+-]?\\d{1,3}(?:\\.\\d+)?"
+    private val pair = Regex("(?<![\\w.+-])($NUMBER)(?:\\s*,\\s*|\\s+)($NUMBER)(?![\\w.])")
+    private val place = Regex("!3d($NUMBER)!4d($NUMBER)")
+    private val url = Regex("https?://[^\\s<>]+", RegexOption.IGNORE_CASE)
 
-    private val COORD_REGEX = Pattern.compile("(-?\\d{1,2}\\.\\d{3,8})[\\s,]+(-?\\d{1,3}\\.\\d{3,8})")
-    private val AT_COORD_REGEX = Pattern.compile("@(-?\\d{1,2}\\.\\d{3,8}),(-?\\d{1,3}\\.\\d{3,8})")
-    private val PARAM_COORD_REGEX = Pattern.compile("(?:q|ll|query|daddr|destination)=(-?\\d{1,2}\\.\\d{3,8}),(-?\\d{1,3}\\.\\d{3,8})")
-    private val GEO_REGEX = Pattern.compile("geo:(-?\\d{1,2}\\.\\d{3,8}),(-?\\d{1,3}\\.\\d{3,8})")
-
-    /**
-     * Parses a string containing coordinates, a Google Maps link, a geo URI, or WhatsApp shared location text.
-     */
-    suspend fun parse(input: String): ParsedLocation? {
-        return withContext(Dispatchers.IO) {
-            val text = input.trim()
-            if (text.isEmpty()) return@withContext null
-
-            // 1. Check if input is a short URL (maps.app.goo.gl or goo.gl/maps)
-            if (text.contains("maps.app.goo.gl") || text.contains("goo.gl/maps")) {
-                val expandedUrl = expandShortUrl(text)
-                if (expandedUrl != null) {
-                    val fromExpanded = parseFromUrl(expandedUrl)
-                    if (fromExpanded != null) return@withContext fromExpanded
-                }
-            }
-
-            // 2. Parse from standard URL
-            if (text.startsWith("http://") || text.startsWith("https://")) {
-                val fromUrl = parseFromUrl(text)
-                if (fromUrl != null) return@withContext fromUrl
-            }
-
-            // 3. Parse from geo: URI
-            val geoMatcher = GEO_REGEX.matcher(text)
-            if (geoMatcher.find()) {
-                val lat = geoMatcher.group(1)?.toDoubleOrNull()
-                val lng = geoMatcher.group(2)?.toDoubleOrNull()
-                if (lat != null && lng != null) {
-                    return@withContext ParsedLocation(lat, lng)
-                }
-            }
-
-            // 4. Parse from raw text containing coordinate numbers
-            val rawMatcher = COORD_REGEX.matcher(text)
-            if (rawMatcher.find()) {
-                val lat = rawMatcher.group(1)?.toDoubleOrNull()
-                val lng = rawMatcher.group(2)?.toDoubleOrNull()
-                if (lat != null && lng != null && isValidCoordinate(lat, lng)) {
-                    return@withContext ParsedLocation(lat, lng)
-                }
-            }
-
-            null
+    suspend fun parse(input: String): ParsedLocation? = withContext(Dispatchers.IO) {
+        val text = input.trim()
+        if (text.isEmpty() || text.length > 16_384) return@withContext null
+        if (text.startsWith("geo:", ignoreCase = true)) {
+            val query = text.substringAfter('?', "").split('&')
+                .firstOrNull { it.startsWith("q=") }?.substringAfter('=')
+            return@withContext if (query != null) coordinates(Uri.decode(query))
+                else coordinates(text.substringAfter(':').substringBefore('?'))
         }
+        val link = url.find(text)?.value ?: text.takeIf {
+            it.startsWith("maps.app.goo.gl/") || it.startsWith("goo.gl/maps/")
+        }?.let { "https://$it" }
+        if (link != null) {
+            val uri = Uri.parse(link)
+            if (isShortLink(uri)) return@withContext expandShortUrl(link)?.let(::parseFromUrl)
+            return@withContext parseFromUrl(link)
+        }
+        coordinates(text)
     }
 
-    private fun parseFromUrl(urlStr: String): ParsedLocation? {
-        try {
-            val uri = Uri.parse(urlStr)
+    private fun coordinates(text: String): ParsedLocation? = pair.find(text)?.let(::validated)
 
-            // A. Query parameters: q=lat,lng or ll=lat,lng
-            val qParam = uri.getQueryParameter("q") ?: uri.getQueryParameter("query") ?: uri.getQueryParameter("ll") ?: uri.getQueryParameter("daddr")
-            if (qParam != null) {
-                val matcher = COORD_REGEX.matcher(qParam)
-                if (matcher.find()) {
-                    val lat = matcher.group(1)?.toDoubleOrNull()
-                    val lng = matcher.group(2)?.toDoubleOrNull()
-                    if (lat != null && lng != null) {
-                        return ParsedLocation(lat, lng)
-                    }
-                }
-            }
-
-            // B. Path-based coordinates: @lat,lng,zoom
-            val atMatcher = AT_COORD_REGEX.matcher(urlStr)
-            if (atMatcher.find()) {
-                val lat = atMatcher.group(1)?.toDoubleOrNull()
-                val lng = atMatcher.group(2)?.toDoubleOrNull()
-                if (lat != null && lng != null) {
-                    return ParsedLocation(lat, lng)
-                }
-            }
-
-            // C. Regex match anywhere in URL
-            val paramMatcher = PARAM_COORD_REGEX.matcher(urlStr)
-            if (paramMatcher.find()) {
-                val lat = paramMatcher.group(1)?.toDoubleOrNull()
-                val lng = paramMatcher.group(2)?.toDoubleOrNull()
-                if (lat != null && lng != null) {
-                    return ParsedLocation(lat, lng)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("LocationLinkParser", "Failed to parse URL: ${e.message}")
-        }
-        return null
+    private fun validated(match: MatchResult): ParsedLocation? {
+        val lat = match.groupValues[1].toDoubleOrNull() ?: return null
+        val lng = match.groupValues[2].toDoubleOrNull() ?: return null
+        return if (lat.isFinite() && lng.isFinite() && lat in -90.0..90.0 && lng in -180.0..180.0)
+            ParsedLocation(lat, lng) else null
     }
 
-    private fun expandShortUrl(shortUrl: String): String? {
-        var currentUrl = shortUrl
-        if (!currentUrl.startsWith("http://") && !currentUrl.startsWith("https://")) {
-            val matcher = Pattern.compile("https?://[^\\s]+").matcher(shortUrl)
-            if (matcher.find()) {
-                currentUrl = matcher.group(0) ?: shortUrl
-            } else {
-                currentUrl = "https://$shortUrl"
-            }
+    private fun parseFromUrl(value: String): ParsedLocation? {
+        val uri = Uri.parse(value)
+        // A destination takes precedence over the viewport or route origin.
+        for (key in listOf("destination", "daddr", "q", "query", "ll")) {
+            val parameter = uri.getQueryParameter(key) ?: continue
+            return coordinates(parameter)
         }
-
-        try {
-            var connection = URL(currentUrl).openConnection() as HttpURLConnection
-            connection.instanceFollowRedirects = false
-            connection.connectTimeout = 5000
-            connection.readTimeout = 5000
-            connection.requestMethod = "HEAD"
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0")
-            connection.connect()
-
-            val responseCode = connection.responseCode
-            if (responseCode in 300..399) {
-                val redirectedUrl = connection.getHeaderField("Location")
-                if (!redirectedUrl.isNullOrEmpty()) {
-                    return redirectedUrl
-                }
-            }
-
-            // If HEAD was not redirected, try GET
-            connection.disconnect()
-            connection = URL(currentUrl).openConnection() as HttpURLConnection
-            connection.instanceFollowRedirects = true
-            connection.connectTimeout = 5000
-            connection.readTimeout = 5000
-            connection.connect()
-            return connection.url.toString()
-        } catch (e: Exception) {
-            Log.e("LocationLinkParser", "Error expanding short URL: ${e.message}")
-        }
-        return null
+        val decoded = Uri.decode(value)
+        place.findAll(decoded).lastOrNull()?.let { return validated(it) }
+        return Regex("@($NUMBER),($NUMBER)(?![\\d.])").find(decoded)?.let(::validated)
     }
 
-    private fun isValidCoordinate(lat: Double, lng: Double): Boolean {
-        return lat in -90.0..90.0 && lng in -180.0..180.0
+    private fun isShortLink(uri: Uri): Boolean = uri.host == "maps.app.goo.gl" ||
+        (uri.host == "goo.gl" && uri.path.orEmpty().startsWith("/maps"))
+
+    internal fun isAllowedExpansionUrl(value: String): Boolean {
+        val uri = Uri.parse(value)
+        return uri.scheme == "https" && uri.userInfo == null && (uri.port == -1 || uri.port == 443) &&
+            (isShortLink(uri) || uri.host in setOf("google.com", "www.google.com", "maps.google.com", "www.google.co.in", "maps.google.co.in"))
+    }
+
+    private fun expandShortUrl(value: String): String? {
+        var current = value
+        repeat(5) {
+            if (!isAllowedExpansionUrl(current)) return null
+            if (parseFromUrl(current) != null) return current
+            val connection = (URL(current).openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects = false
+                connectTimeout = 5000
+                readTimeout = 5000
+                setRequestProperty("User-Agent", "WayPoint/1.1")
+            }
+            try {
+                if (connection.responseCode !in setOf(301, 302, 303, 307, 308)) return current
+                val next = connection.getHeaderField("Location") ?: return null
+                current = URL(URL(current), next).toString()
+            } catch (_: java.io.IOException) {
+                return null
+            } finally {
+                connection.disconnect()
+            }
+        }
+        return current.takeIf { isAllowedExpansionUrl(it) }
     }
 }

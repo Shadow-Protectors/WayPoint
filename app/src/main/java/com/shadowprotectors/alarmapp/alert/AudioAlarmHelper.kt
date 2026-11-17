@@ -26,6 +26,7 @@ object AudioAlarmHelper {
 
     @Volatile
     private var isAlarmPlaying = false
+    private var originalAlarmVolume: Int? = null
 
     private var audioFocusRequest: android.media.AudioFocusRequest? = null
 
@@ -155,6 +156,8 @@ object AudioAlarmHelper {
 
         } catch (e: Exception) {
             Log.e("AudioAlarmHelper", "Error playing Level 2 ping: ${e.message}")
+            stopAlertPing()
+            try { getVibrator(appContext).cancel() } catch (_: Exception) {}
         }
     }
 
@@ -194,47 +197,14 @@ object AudioAlarmHelper {
 
         // 2. Maximize Audio Streams
         val audioManager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val notificationManager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? android.app.NotificationManager
 
         // Maximize STREAM_ALARM first (does not require DND policy access on Android)
         try {
+            originalAlarmVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
             val maxAlarmVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
             audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxAlarmVol, 0)
         } catch (e: Exception) {
             Log.w("AudioAlarmHelper", "Could not set STREAM_ALARM volume: ${e.message}")
-        }
-
-        // Maximize STREAM_RING, STREAM_MUSIC, STREAM_NOTIFICATION if policy access permits
-        try {
-            val canModifyRinger = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                notificationManager?.isNotificationPolicyAccessGranted == true
-            } else {
-                true
-            }
-
-            if (canModifyRinger && audioManager.ringerMode != AudioManager.RINGER_MODE_NORMAL) {
-                try {
-                    audioManager.ringerMode = AudioManager.RINGER_MODE_NORMAL
-                } catch (e: Exception) {
-                    Log.w("AudioAlarmHelper", "Could not set ringer mode to NORMAL: ${e.message}")
-                }
-            }
-
-            val streamsToMaximize = intArrayOf(
-                AudioManager.STREAM_RING,
-                AudioManager.STREAM_MUSIC,
-                AudioManager.STREAM_NOTIFICATION
-            )
-            for (stream in streamsToMaximize) {
-                try {
-                    val maxVol = audioManager.getStreamMaxVolume(stream)
-                    audioManager.setStreamVolume(stream, maxVol, 0)
-                } catch (e: Exception) {
-                    Log.w("AudioAlarmHelper", "Could not set volume for stream $stream: ${e.message}")
-                }
-            }
-        } catch (e: Exception) {
-            Log.w("AudioAlarmHelper", "Could not set stream volume (DND policy restriction): ${e.message}")
         }
 
         // 3. Request transient exclusive Audio Focus with USAGE_ALARM to interrupt headphones / music
@@ -275,7 +245,8 @@ object AudioAlarmHelper {
             // A. Primary: MediaPlayer with USAGE_ALARM
             if (alarmUri != null) {
                 try {
-                    mediaPlayer = MediaPlayer().apply {
+                    mediaPlayer = MediaPlayer()
+                    mediaPlayer!!.apply {
                         setDataSource(appContext, alarmUri)
                         setAudioAttributes(
                             AudioAttributes.Builder()
@@ -291,6 +262,8 @@ object AudioAlarmHelper {
                     }
                     soundStarted = true
                 } catch (mpEx: Exception) {
+                    mediaPlayer?.release()
+                    mediaPlayer = null
                     Log.w("AudioAlarmHelper", "MediaPlayer failed, attempting Ringtone fallback: ${mpEx.message}")
                 }
             }
@@ -440,6 +413,17 @@ object AudioAlarmHelper {
             emergencyAudioTrack = null
             isAlarmPlaying = false
         }
+
+        // Restore only the alarm stream; leave media and ringer preferences untouched.
+        originalAlarmVolume?.let { volume ->
+            try {
+                val manager = appContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                manager.setStreamVolume(AudioManager.STREAM_ALARM, volume, 0)
+            } catch (error: Exception) {
+                Log.w("AudioAlarmHelper", "Could not restore alarm volume", error)
+            }
+        }
+        originalAlarmVolume = null
 
         // 5. Release Audio Focus
         try {

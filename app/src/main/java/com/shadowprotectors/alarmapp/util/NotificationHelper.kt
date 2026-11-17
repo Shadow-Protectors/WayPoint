@@ -126,8 +126,8 @@ object NotificationHelper {
             ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
 
         return NotificationCompat.Builder(context, CHANNEL_ALARM_ID)
-            .setContentTitle("🚨 Arriving at $destinationName!")
-            .setContentText(String.format("You are %.2f km away. Wake up and prepare your luggage!", distanceKm))
+            .setContentTitle("Near $destinationName")
+            .setContentText(String.format(java.util.Locale.getDefault(), "Distance to stop: %.2f km", distanceKm))
             .setSmallIcon(R.drawable.ic_alarm)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
@@ -136,6 +136,7 @@ object NotificationHelper {
             .setAutoCancel(false)
             .setOngoing(true)
             .setFullScreenIntent(fullScreenPendingIntent, true)
+            .setContentIntent(fullScreenPendingIntent)
             .addAction(R.drawable.ic_alarm, "Dismiss Alarm", dismissIntent)
             .build()
     }

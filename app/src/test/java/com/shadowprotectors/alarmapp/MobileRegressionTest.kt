@@ -23,6 +23,13 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class MobileRegressionTest {
+    @org.junit.After fun closeDatabase() {
+        val field = com.shadowprotectors.alarmapp.data.AppDatabase::class.java.getDeclaredField("INSTANCE").apply { isAccessible = true }
+        (field.get(null) as? com.shadowprotectors.alarmapp.data.AppDatabase)?.close()
+        field.set(null, null)
+        com.shadowprotectors.alarmapp.service.ServiceEventBus.resetState()
+    }
+
     @Test fun selectedPlaceIncludesStreetAndLocalityInsteadOfOnlyBuildingNumber() {
         val address = android.location.Address(java.util.Locale.ENGLISH).apply {
             featureName = "198"

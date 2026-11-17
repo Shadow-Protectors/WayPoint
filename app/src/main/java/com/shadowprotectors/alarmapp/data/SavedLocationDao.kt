@@ -31,4 +31,10 @@ interface SavedLocationDao {
 
     @Query("SELECT * FROM saved_locations WHERE id = :id")
     suspend fun getById(id: Long): SavedLocation?
+
+    @Query("UPDATE saved_locations SET last_used_at = :timestamp, use_count = use_count + 1 WHERE id = :id")
+    suspend fun recordUsage(id: Long, timestamp: Long)
+
+    @Query("UPDATE saved_locations SET custom_name = :name WHERE id = :id")
+    suspend fun rename(id: Long, name: String)
 }

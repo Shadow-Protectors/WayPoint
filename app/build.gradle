@@ -27,8 +27,8 @@ android {
     }
 
     lintOptions {
-        checkReleaseBuilds false
-        abortOnError false
+        checkReleaseBuilds true
+        abortOnError true
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
